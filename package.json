@@ -1,21 +1,19 @@
-{
-  "name": "imc-ep",
-  "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "bcrypt": "^6.0.0",
-    "express": "^5.1.0",
-    "sqlite3": "^5.1.7"
-  },
-  "devDependencies": {
-    "@flydotio/dockerfile": "^0.7.10"
-  }
+"dependencies": {
+  "bcrypt": "^5.1.1",
+  "express": "^4.18.2",
+  "sqlite3": "^5.1.6"
 }
+```2.  **Abre tu archivo `server.js`**. Asegúrate de que las funciones de login y registro de usuarios sean las versiones **seguras**, las que usan `bcrypt`. Te las dejo aquí de nuevo para que las copies y pegues, reemplazando las que tengas:
+
+```javascript
+// Función de Login SEGURA
+app.post('/api/login', (req, res) => {
+    const { cip, password } = req.body;
+    // ... (el resto del código de login con bcrypt.compare)
+});
+
+// Función de Registro SEGURA
+app.post('/api/users', async (req, res) => {
+    const { cip, fullName, password, role } = req.body;
+    // ... (el resto del código de registro con bcrypt.hash)
+});
