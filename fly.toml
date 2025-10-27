@@ -10,9 +10,6 @@ primary_region = 'gru'
   auto_start_machines = true
   min_machines_running = 0
 
-# [NUEVA SECCIÓN AÑADIDA]
-# Esto le dice a Fly.io que cree un disco persistente llamado "simcep_data"
-# y lo haga accesible dentro de nuestra aplicación en la carpeta /data
 [mounts]
   source = "simcep_data"
   destination = "/data"
