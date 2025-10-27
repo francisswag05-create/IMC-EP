@@ -1,0 +1,269 @@
+/* PALETA DE COLORES: GREEN-TECH OPERACIONAL (Asegura la consistencia) */
+:root {
+    /* Verdes: Seriedad y Tecnología */
+    --color-primary-green: #008744; /* Verde Principal (Botones) */
+    --color-green-dark: #121F17;    /* Fondo de Tarjetas (Deep Moss Green) */
+    --color-green-darker: #0D1610;  /* Fondo Principal (Charcoal Green) */
+
+    /* Acentos: Lujo y Alerta */
+    --color-accent-lime: #CCFF00;   /* Acento vibrante (Resultados/Anillos de enfoque) */
+    --color-accent-gold: #FFD700;   /* Acento Secundario (Títulos/Riesgo) */
+    --color-alert-red: #E74C3C;     /* Rojo para peligro/alerta/INAPTO */
+    
+    /* Variables de Color para Diagnóstico (Aptitud) */
+    --color-aptitud-optimo: var(--color-primary-green); /* APTO */
+    --color-aptitud-riesgo: var(--color-accent-gold);    /* ADVERTENCIA/WARNING */
+    
+    /* Texto y Neutros */
+    --color-text-light: #EEEEEE;        /* Texto Principal */
+    --color-text-muted: #A0A0A0;        /* Texto Secundario/Placeholders */
+    --color-border: #2A382C;            /* Borde Suave */
+}
+
+/* Base Body: Fondo Oscuro y Tipografía */
+body {
+    background-color: var(--color-green-darker);
+    color: var(--color-text-light);
+    font-family: 'Roboto', 'Arial', sans-serif;
+    line-height: 1.6;
+    /* Patrón de fondo sutil */
+    background-image: radial-gradient(circle at center, rgba(0,0,0,0.2) 1px, transparent 0);
+    background-size: 50px 50px;
+}
+
+/* --- 1. MEJORAS ESTRUCTURALES Y TIPOGRAFÍA DE LA UI --- */
+
+/* Estilos de Títulos Generales (Fuera de las tarjetas) */
+h1 {
+    color: var(--color-accent-gold);
+    font-size: 2.25rem; /* text-3xl en Tailwind */
+    font-weight: 700;
+}
+h2 {
+    color: var(--color-accent-lime);
+    font-size: 1.5rem; /* text-xl en Tailwind */
+    font-weight: 600;
+}
+
+/* Header: Usamos las variables de color */
+header {
+    background-color: var(--color-green-dark);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    border-bottom: 3px solid var(--color-accent-lime);
+}
+
+/* CRÍTICO: Aseguramos el estilo de las tarjetas que contiene el login/formulario */
+.card-tech {
+    background-color: var(--color-green-dark);
+    padding: 3rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease;
+    border: 1px solid var(--color-border);
+}
+.card-tech:hover {
+    transform: translateY(-2px); /* Pequeño efecto hover */
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(0, 0, 0, 0.5);
+}
+.card-tech h2, .card-tech h3 {
+    color: var(--color-accent-gold);
+    border-bottom: 2px solid var(--color-accent-lime);
+    padding-bottom: 0.5rem; /* Espacio para la línea */
+}
+
+/* FIX: Estilos de Inputs para mayor contraste y estética */
+.label-tech {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+}
+.input-tech {
+    width: 100%;
+    padding: 14px;
+    border-radius: 8px;
+    background-color: var(--color-green-darker);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-light);  
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+.input-tech:focus {
+    outline: none;
+    border-color: var(--color-primary-green);
+    box-shadow: 0 0 0 3px rgba(0, 135, 68, 0.5);  
+    background-color: #15251a;    /* Fondo ligeramente más claro al enfocar */
+}
+
+/* Botones */
+.btn-primary-tech {
+    padding: 14px 25px;
+    font-weight: bold;
+    border-radius: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.4s ease;
+    border: none;
+    cursor: pointer;
+}
+.btn-primary-tech:hover {
+    opacity: 0.85;
+    transform: translateY(-1px);
+}
+.btn-calculate {
+    background-color: var(--color-primary-green);
+    color: var(--color-green-darker);
+}
+.btn-login {
+    background-color: var(--color-accent-gold);
+    color: var(--color-green-darker);
+}
+.btn-logout {
+    background-color: var(--color-alert-red);
+    color: white;
+}
+
+/* Estilo para la caja de resultados del IMC (público y admin) */
+.result-box-tech {
+    background-color: #1A3629; /* Fondo muy oscuro, ligeramente diferente al card */
+    border: 1px solid var(--color-primary-green);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+}
+.result-box-tech h3 {
+    color: var(--color-accent-lime);
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+.result-box-tech p {
+    color: var(--color-text-light);
+    font-size: 1rem;
+}
+
+/* Etiqueta de Aptitud (IMC/Resultado) */
+.aptitude-badge {
+    font-size: 1.25rem;
+    padding: 8px 15px;
+    border-radius: 9999px; /* full rounded */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+    display: inline-block;
+    min-width: 120px;
+    text-align: center;
+}
+
+
+/* --- 2. ESTILOS DASHBOARD Y TABLAS (ADMIN) --- */
+
+.admin-header-title { 
+    color: var(--color-accent-lime); 
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+/* CRÍTICO: Estilo para la barra de monitoreo */
+.admin-info-bar { 
+    background-color: var(--color-green-dark);
+    border-left: 5px solid var(--color-accent-gold);
+    padding: 1.5rem; 
+    gap: 1.5rem; 
+    font-weight: 500;
+}
+
+/* El estilo para el nombre del admin (inyeccion dinámica con un <span>) */
+#monitoring-status-text .text-color-accent-lime {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--color-accent-lime); /* Verde neón para el nombre activo */
+    padding: 5px 10px;
+    border-radius: 5px;
+    background-color: #1A3629; /* Fondo muy oscuro para resaltarlo */
+    margin-left: 0.5rem; /* Separación del texto "Monitoreo Activo:" */
+}
+
+/* Estilos de la tabla */
+.table-container {
+    background-color: var(--color-green-dark); /* Contenedor sutil */
+    border: 1px solid var(--color-primary-green); /* Borde más fuerte */
+    border-radius: 8px;
+    overflow-x: auto; /* Para tablas que se salen de la pantalla */
+}
+
+/* Cabecera de la tabla */
+.admin-table-header {
+    background-color: var(--color-green-darker); /* Fondo oscuro */
+    border-bottom: 3px solid var(--color-primary-green);
+}
+.admin-table-header th { 
+    color: var(--color-accent-lime); /* Texto en verde neón */
+    font-weight: 700; 
+    font-size: 0.7rem; /* Reducido para tabla compacta */
+    padding: 0.75rem 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: none; /* Elimina borde individual de TH */
+}
+
+/* Cuerpo de la tabla */
+#admin-table-body td {
+    padding: 10px 16px; /* Ajuste para que sea menos alto */
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-light);
+    font-size: 0.85rem;
+}
+#admin-table-body tr:hover { 
+    background-color: #1a2c20 !important; 
+    cursor: default;
+}
+.hidden-view { display: none !important; }
+
+
+/* --- 3. CLASES DE COLOR Y UTILITY (Para inyección de JS) --- */
+
+/* Mapeo de Colores para Mensajes y Badges (Usados por JS) */
+.bg-red-600 { 
+    background-color: var(--color-alert-red) !important; 
+    color: white !important;
+}
+.bg-green-600 { 
+    background-color: var(--color-aptitud-optimo) !important; 
+    color: white !important;
+}
+.bg-yellow-600 { 
+    background-color: var(--color-accent-gold) !important; /* Mapeado al oro */
+    color: var(--color-green-darker) !important;
+}
+
+/* Clases de Fondo (bg-) */
+.bg-color-accent-gold {
+    background-color: var(--color-accent-gold) !important;
+}
+.bg-color-accent-lime {
+    background-color: var(--color-accent-lime) !important;
+}
+
+/* Clases de Borde (border-) */
+.border-color-accent-gold {
+    border-color: var(--color-accent-gold) !important;
+}
+.border-gray-600 { /* Usado en updateUI() para el estado sin autenticar */
+    border-color: var(--color-border) !important;
+}
+
+/* Clases de Texto (text-) */
+.text-color-accent-lime {
+    color: var(--color-accent-lime) !important;
+}
+.text-color-accent-gold {
+    color: var(--color-accent-gold) !important;
+}
+.text-color-text-muted {
+    color: var(--color-text-muted) !important;
+}
+.text-color-green-darker {
+    color: var(--color-green-darker) !important;
+}
+.text-color-primary-green {
+    color: var(--color-primary-green) !important;
+}
