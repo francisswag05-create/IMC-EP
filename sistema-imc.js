@@ -1,29 +1,17 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CORREGIDA - CON LOGIN Y ELIMINAR FUNCIONALES)
+// Archivo: sistema-imc.js (VERSIÓN CORREGIDA CON LOGIN SEGURO DESDE EL SERVIDOR)
 // =================================================================================================
 
-// --- 1. Credenciales de Administrador (Autenticación Local Simple) ---
-const ADMIN_CREDENTIALS = {
-    'fpachecov': 'fpachecov',
-    'jordayac': '123456789',
-    '123456': '123456'
-};
-
-const ADMIN_DETAILS = {
-    'fpachecov': 'Pacheco Valverde Francis',
-    'jordayac': 'Ordaya Crisostomo Jesser',
-    '123456': 'USUARIO DE PRUEBA'
-};
-
-
-// --- 2. Variables de Estado Globales ---
+// --- 1. Variables de Estado Globales ---
+// NO MÁS CREDENCIALES AQUÍ. ¡Ahora es seguro!
 let isAuthenticated = false;
-let currentAdminUser = null;
+let currentAdminUser = null; 
+let currentAdminFullName = null; 
 let allRecordsFromDB = [];
 let currentFilteredRecords = [];
 
 
-// --- 3. Funciones de Utilidad y UI ---
+// --- 2. Funciones de Utilidad y UI ---
 
 function displayMessage(title, text, type) {
     const box = document.getElementById('message-box');
@@ -59,11 +47,10 @@ async function updateUI() {
         userInfo.classList.remove('text-color-accent-lime', 'border-gray-600');
         userInfo.classList.add('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
 
-        if (monitoringTextEl && ADMIN_DETAILS[currentAdminUser]) {
-            const adminName = ADMIN_DETAILS[currentAdminUser];
+        if (monitoringTextEl && currentAdminFullName) {
             monitoringTextEl.innerHTML = `
                 <i class="fas fa-check-double mr-3 text-color-accent-gold"></i>
-                **SISTEMA ONLINE.** Monitoreo Activo: <span class="text-color-accent-lime">${adminName}</span>`;
+                Monitoreo Activo: <span class="text-color-accent-lime">${currentAdminFullName}</span>`;
         }
         
         updateAdminTableHeaders();
@@ -74,6 +61,9 @@ async function updateUI() {
         userInfo.textContent = 'Estado: SIN AUTENTICAR';
         userInfo.classList.remove('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
         userInfo.classList.add('text-color-accent-lime', 'border-gray-600');
+        
+        document.getElementById('admin-username').value = '';
+        document.getElementById('admin-password').value = '';
 
         if (monitoringTextEl) {
             monitoringTextEl.innerHTML = '¡Sistema en espera! Inicie sesión para activar el monitoreo.';
@@ -84,7 +74,6 @@ async function updateUI() {
 function updateAdminTableHeaders() {
     const tableHeaderRow = document.querySelector('#admin-dashboard-view thead tr');
     if (tableHeaderRow) {
-        // **[CORREGIDO]** Se restauran todas las columnas y se añade ACCIÓN al final
         tableHeaderRow.innerHTML = `
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">CIP</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">GRADO</th>
@@ -106,7 +95,7 @@ function getSimplifiedAptitudeStyle(resultado) {
 }
 
 
-// --- 4. Funciones de Cálculo de IMC y Clasificación ---
+// --- 3. Funciones de Cálculo de IMC y Clasificación ---
 
 function calculateIMC(weight, height) {
     if (height > 0) {
@@ -162,25 +151,44 @@ document.getElementById('bmi-form').addEventListener('submit', function(e) {
 });
 
 
-// --- 5. Funciones de Autenticación y Administración ---
+// --- 4. Funciones de Autenticación y Administración (¡CORREGIDAS!) ---
 
-function attemptAdminLogin() {
+async function attemptAdminLogin() {
     const username = document.getElementById('admin-username').value;
     const password = document.getElementById('admin-password').value;
 
-    if (ADMIN_CREDENTIALS[username] === password) {
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ cip: username, password: password })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || 'Error en el inicio de sesión.');
+        }
+
         isAuthenticated = true;
-        currentAdminUser = username;
-        displayMessage('ACCESO CONCEDIDO', `Bienvenido, ${username.toUpperCase()}. Acceso a Módulo de Gestión.`, 'success');
+        currentAdminUser = data.user.cip;
+        currentAdminFullName = data.user.fullName;
+
+        displayMessage('ACCESO CONCEDIDO', `Bienvenido, ${currentAdminFullName}.`, 'success');
         updateUI();
-    } else {
-        displayMessage('ACCESO DENEGADO', 'Credenciales de Usuario o Clave incorrectas.', 'error');
+
+    } catch (error) {
+        displayMessage('ACCESO DENEGADO', error.message, 'error');
+        console.error("Detalle del error de login:", error);
     }
 }
 
 function logoutAdmin() {
     isAuthenticated = false;
     currentAdminUser = null;
+    currentAdminFullName = null;
     allRecordsFromDB = [];
     currentFilteredRecords = [];
     displayMessage('SESIÓN CERRADA', 'Has salido del módulo de administración.', 'warning');
@@ -189,7 +197,7 @@ function logoutAdmin() {
     updateUI();
 }
 
-// --- 6. Funciones de Data y CRUD (Comunicación con el Servidor Local) ---
+// --- 5. Funciones de Data y CRUD (Comunicación con el Servidor Local) ---
 
 async function fetchAndDisplayRecords() {
     try {
@@ -245,9 +253,12 @@ async function deleteRecord(cip) {
     }
 }
 
+// --- 6. Lógica de la Tabla (Filtros, Renderizado, Exportación) ---
+
 function populateMonthFilter() {
     const filterSelect = document.getElementById('month-filter');
     const monthCounts = allRecordsFromDB.reduce((acc, record) => {
+        if (!record.fecha) return acc;
         const monthYear = record.fecha.substring(3); 
         acc[monthYear] = (acc[monthYear] || 0) + 1;
         return acc;
@@ -287,7 +298,7 @@ function filterTable() {
     }
     if (monthFilter) {
         recordsToDisplay = recordsToDisplay.filter(record => 
-            record.fecha.substring(3) === monthFilter
+            record.fecha && record.fecha.substring(3) === monthFilter
         );
     }
     currentFilteredRecords = recordsToDisplay;
@@ -297,7 +308,6 @@ function filterTable() {
 function renderTable(records) {
     const tableBody = document.getElementById('admin-table-body');
     tableBody.innerHTML = '';
-    // **[CORREGIDO]** El colspan ahora es 10 para incluir la nueva columna
     const COLSPAN_VALUE = 10;
     if (!isAuthenticated) {
         tableBody.innerHTML = `<tr><td colspan="${COLSPAN_VALUE}" class="text-center py-4">No está autenticado.</td></tr>`;
@@ -314,7 +324,6 @@ function renderTable(records) {
         const row = tableBody.insertRow();
         row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
         
-        // **[CORREGIDO]** Se renderizan todas las columnas originales y se añade la celda de acción
         row.innerHTML = `
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${data.cip || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">${data.grado || 'N/A'}</td>
