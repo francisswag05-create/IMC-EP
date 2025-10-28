@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: crear-usuario.js (VERSIÓN FINAL Y CORREGIDA PARA FLY.IO)
+// Archivo: crear-usuario.js (ACTUALIZADO PARA ASIGNAR EL ROL 'superadmin')
 // =================================================================================================
 
 const sqlite3 = require('sqlite3').verbose();
@@ -12,7 +12,7 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-// [CORREGIDO] Conexión a la base de datos en el volumen persistente de Fly.io
+// Conexión a la base de datos en el volumen persistente de Fly.io
 const dbPath = '/data/simcep';
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
@@ -49,7 +49,10 @@ function crearUsuario() {
 
                     const sql = "INSERT INTO users (cip, fullName, password, role) VALUES (?, ?, ?, ?)";
                     
-                    db.run(sql, [cip, fullName, hash, 'admin'], function(err) {
+                    // [MODIFICACIÓN CLAVE]
+                    // Este script ahora crea usuarios con el rol 'superadmin'.
+                    // Los usuarios creados a través de la web serán 'admin' por defecto (según server.js).
+                    db.run(sql, [cip, fullName, hash, 'superadmin'], function(err) {
                         if (err) {
                              if (err.message.includes('UNIQUE constraint failed')) {
                                 console.error(`\n[ERROR] El CIP '${cip}' ya existe en la base de datos.`);
@@ -57,7 +60,7 @@ function crearUsuario() {
                                 console.error("\n[ERROR] Error al guardar en la base de datos:", err.message);
                             }
                         } else {
-                            console.log(`\n¡ÉXITO! Usuario administrador '${fullName}' (CIP: ${cip}) creado correctamente.`);
+                            console.log(`\n¡ÉXITO! Usuario SUPERADMINISTRADOR '${fullName}' (CIP: ${cip}) creado correctamente.`);
                         }
                         
                         rl.close();

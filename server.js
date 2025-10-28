@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: server.js (COMPLETO Y ACTUALIZADO PARA FLY.IO CON VOLUMEN PERSISTENTE)
+// Archivo: server.js (COMPLETO Y ACTUALIZADO CON ROLES DE USUARIO)
 // =================================================================================================
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
@@ -18,7 +18,6 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '/'))); 
 
 // --- 3. CONEXIÓN A LA BASE DE DATOS SQLITE (MODIFICADO PARA VOLUMEN PERSISTENTE) ---
-// La ruta ahora apunta a la carpeta /data donde el volumen está montado en Fly.io.
 const dbPath = '/data/simcep';
 
 const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
@@ -26,7 +25,6 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
         console.error("Error al conectar con la base de datos en el volumen:", err.message);
     } else {
         console.log("Conexión a la base de datos SQLite en el volumen '/data' establecida con éxito.");
-        // Opcional: Asegurarse de que las tablas existan al iniciar el servidor
         db.exec(`
             CREATE TABLE IF NOT EXISTS users (
                 cip TEXT PRIMARY KEY,
@@ -64,7 +62,6 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 // == RUTAS EXISTENTES PARA LOS REGISTROS DE IMC ==
 
-// [GET] /api/records - Obtiene todos los registros de IMC
 app.get('/api/records', (req, res) => {
     const sql = "SELECT * FROM records ORDER BY fecha DESC, id DESC";
     db.all(sql, [], (err, rows) => {
@@ -75,12 +72,8 @@ app.get('/api/records', (req, res) => {
     });
 });
 
-// [POST] /api/records - Guarda un nuevo registro de IMC
 app.post('/api/records', (req, res) => {
     const { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor } = req.body;
-    // He corregido un pequeño error en tu diseño original: El CIP no puede ser UNIQUE por sí solo
-    // si quieres registrar el mismo personal en diferentes fechas. La combinación de CIP y Fecha debe ser única.
-    // La sentencia CREATE TABLE de arriba ya lo refleja con UNIQUE(cip, fecha).
     const sql = `INSERT INTO records (sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     db.run(sql, [sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor], function(err) {
@@ -94,7 +87,6 @@ app.post('/api/records', (req, res) => {
     });
 });
 
-// [DELETE] /api/records/:cip - Elimina un registro por su CIP
 app.delete('/api/records/:cip', (req, res) => {
     const { cip } = req.params;
     const sql = "DELETE FROM records WHERE cip = ?";
@@ -111,9 +103,8 @@ app.delete('/api/records/:cip', (req, res) => {
 });
 
 
-// == RUTA DE LOGIN ==
+// == RUTA DE LOGIN (MODIFICADA PARA INCLUIR EL ROL) ==
 
-// [POST] /api/login - Maneja el inicio de sesión de forma segura
 app.post('/api/login', (req, res) => {
     const { cip, password } = req.body;
     if (!cip || !password) {
@@ -135,6 +126,9 @@ app.post('/api/login', (req, res) => {
             }
             
             if (result) {
+                // [MODIFICACIÓN CLAVE]
+                // Ahora la respuesta incluye el 'role' del usuario.
+                // El frontend usará esto para decidir si muestra o no la sección de gestión de usuarios.
                 res.json({
                     message: "Login exitoso",
                     user: { cip: user.cip, fullName: user.fullName, role: user.role }
@@ -148,7 +142,6 @@ app.post('/api/login', (req, res) => {
 
 // == RUTAS PARA GESTIÓN DE USUARIOS ==
 
-// [GET] /api/users - Obtiene todos los usuarios (de forma segura, sin contraseñas)
 app.get('/api/users', (req, res) => {
     const sql = "SELECT cip, fullName, role FROM users";
     db.all(sql, [], (err, rows) => {
@@ -159,7 +152,6 @@ app.get('/api/users', (req, res) => {
     });
 });
 
-// [POST] /api/users - Crea un nuevo usuario con contraseña encriptada
 app.post('/api/users', (req, res) => {
     const { cip, fullName, password } = req.body;
     if (!cip || !fullName || !password) {
@@ -171,6 +163,7 @@ app.post('/api/users', (req, res) => {
             return res.status(500).json({ message: "Error al encriptar la contraseña." });
         }
 
+        // Todos los nuevos usuarios creados desde la web tendrán el rol 'admin' por defecto.
         const sql = "INSERT INTO users (cip, fullName, password, role) VALUES (?, ?, ?, ?)";
         db.run(sql, [cip, fullName, hash, 'admin'], function(err) {
             if (err) {
@@ -184,7 +177,6 @@ app.post('/api/users', (req, res) => {
     });
 });
 
-// [DELETE] /api/users/:cip - Elimina un usuario por su CIP
 app.delete('/api/users/:cip', (req, res) => {
     const { cip } = req.params;
     const sql = "DELETE FROM users WHERE cip = ?";
