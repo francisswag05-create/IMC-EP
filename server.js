@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: server.js (VERSIÓN FINAL CON RECUPERACIÓN DE CONTRASEÑA)
+// Archivo: server.js (VERSIÓN FINAL Y COMPLETA CON RECUPERACIÓN DE CONTRASEÑA)
 // =================================================================================================
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
@@ -49,25 +49,114 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 });
 
 
-// --- 4. RUTAS DE LA API (CRUD DE REGISTROS, LOGIN, GESTIÓN DE USUARIOS) ---
-// [Esta sección no cambia, la incluyo para que el archivo esté completo]
+// --- 4. RUTAS DE LA API PARA REGISTROS ---
 
 // [GET] /api/records
-app.get('/api/records', (req, res) => { /* ... Tu código existente ... */ });
+app.get('/api/records', (req, res) => {
+    const sql = "SELECT * FROM records ORDER BY id DESC";
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
 // [POST] /api/records
-app.post('/api/records', (req, res) => { /* ... Tu código existente ... */ });
+app.post('/api/records', (req, res) => {
+    const { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor } = req.body;
+    const sql = `INSERT INTO records (sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    db.run(sql, [sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor], function(err) {
+        if (err) {
+            if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ message: `El CIP ${cip} ya tiene un registro en la fecha ${fecha}.` });
+            return res.status(500).json({ error: err.message });
+        }
+        res.status(201).json({ message: "Registro guardado exitosamente", id: this.lastID });
+    });
+});
+
 // [PUT] /api/records/:id
-app.put('/api/records/:id', (req, res) => { /* ... Tu código existente ... */ });
+app.put('/api/records/:id', (req, res) => {
+    const { id } = req.params;
+    const { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc } = req.body;
+    const sql = `UPDATE records SET 
+                    sexo = ?, cip = ?, grado = ?, apellido = ?, nombre = ?, 
+                    edad = ?, peso = ?, altura = ?, imc = ?
+                 WHERE id = ?`;
+    db.run(sql, [sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, id], function(err) {
+        if (err) return res.status(500).json({ message: "Error al actualizar.", error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
+        res.json({ message: "Registro actualizado." });
+    });
+});
+
 // [DELETE] /api/records/:id
-app.delete('/api/records/:id', (req, res) => { /* ... Tu código existente ... */ });
+app.delete('/api/records/:id', (req, res) => {
+    const { id } = req.params;
+    const sql = "DELETE FROM records WHERE id = ?";
+    db.run(sql, id, function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
+        res.json({ message: `Registro con ID ${id} eliminado.` });
+    });
+});
+
+
+// --- RUTAS DE API PARA USUARIOS Y LOGIN ---
+
 // [POST] /api/login
-app.post('/api/login', (req, res) => { /* ... Tu código existente ... */ });
+app.post('/api/login', (req, res) => {
+    const { cip, password } = req.body;
+    if (!cip || !password) return res.status(400).json({ message: "CIP y contraseña requeridos." });
+    const sql = "SELECT * FROM users WHERE cip = ?";
+    db.get(sql, [cip], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(401).json({ message: "Credenciales incorrectas." });
+        bcrypt.compare(password, user.password, (bcryptErr, result) => {
+            if (bcryptErr) return res.status(500).json({ message: "Error del servidor." });
+            if (result) {
+                res.json({ message: "Login exitoso", user: { cip: user.cip, fullName: user.fullName, role: user.role } });
+            } else {
+                res.status(401).json({ message: "Credenciales incorrectas." });
+            }
+        });
+    });
+});
+
 // [GET] /api/users
-app.get('/api/users', (req, res) => { /* ... Tu código existente ... */ });
+app.get('/api/users', (req, res) => {
+    const sql = "SELECT cip, fullName, role FROM users";
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
 // [POST] /api/users
-app.post('/api/users', (req, res) => { /* ... Tu código existente ... */ });
+app.post('/api/users', (req, res) => {
+    const { cip, fullName, password, email } = req.body;
+    if (!cip || !fullName || !password) return res.status(400).json({ message: "CIP, Nombre y Contraseña requeridos." });
+    bcrypt.hash(password, 10, (err, hash) => {
+        if (err) return res.status(500).json({ message: "Error al encriptar." });
+        const sql = "INSERT INTO users (cip, fullName, password, role, email) VALUES (?, ?, ?, ?, ?)";
+        db.run(sql, [cip, fullName, hash, 'admin', email || null], function(err) {
+            if (err) {
+                if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ message: `El CIP o Email ya está registrado.` });
+                return res.status(500).json({ error: err.message });
+            }
+            res.status(201).json({ message: "Usuario creado.", cip: cip });
+        });
+    });
+});
+
 // [DELETE] /api/users/:cip
-app.delete('/api/users/:cip', (req, res) => { /* ... Tu código existente ... */ });
+app.delete('/api/users/:cip', (req, res) => {
+    const { cip } = req.params;
+    const sql = "DELETE FROM users WHERE cip = ?";
+    db.run(sql, cip, function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "Usuario no encontrado." });
+        res.json({ message: `Usuario con CIP ${cip} eliminado.` });
+    });
+});
 
 
 // --- NUEVAS RUTAS PARA RECUPERACIÓN DE CONTRASEÑA ---
@@ -86,16 +175,19 @@ app.post('/api/forgot-password', (req, res) => {
         db.run(updateSql, [token, expires, cip], async function(err) {
             if (err) return res.status(500).json({ message: "Error al preparar la recuperación." });
 
-            // --- IMPORTANTE: CONFIGURACIÓN DE CORREO PERSONALIZADA ---
+            const emailUser = 'francis.swag.05@gmail.com';
+            const emailPass = 'itgoxxnazoxgutxm';
+
+            if (!emailUser || !emailPass || emailUser.includes('TU_CORREO')) {
+                console.error("ERROR: Credenciales de Nodemailer no configuradas.");
+                return res.status(500).json({ message: "Servicio de correo no configurado." });
+            }
             const transporter = nodemailer.createTransport({
                 service: 'gmail',
-                auth: {
-                    user: 'francis.swag.05@gmail.com',
-                    pass: 'itgoxxnazoxgutxm' // Tu contraseña de aplicación sin espacios
-                }
+                auth: { user: emailUser, pass: emailPass }
             });
             const mailOptions = {
-                from: '"SIMCEP Admin" <francis.swag.05@gmail.com>',
+                from: `"SIMCEP Admin" <${emailUser}>`,
                 to: user.email,
                 subject: 'Restablecimiento de Contraseña - SIMCEP',
                 text: `Ha solicitado un restablecimiento de contraseña.\n\n` +
