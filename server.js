@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: server.js (COMPLETO Y ACTUALIZADO CON ROLES DE USUARIO)
+// Archivo: server.js (VERSIÓN FINAL Y COMPLETA CON RUTA DE EDICIÓN)
 // =================================================================================================
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json()); 
 app.use(express.static(path.join(__dirname, '/'))); 
 
-// --- 3. CONEXIÓN A LA BASE DE DATOS SQLITE (MODIFICADO PARA VOLUMEN PERSISTENTE) ---
+// --- 3. CONEXIÓN A LA BASE DE DATOS SQLITE ---
 const dbPath = '/data/simcep';
 
 const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
@@ -48,128 +48,103 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 UNIQUE(cip, fecha)
             );
         `, (err) => {
-            if (err) {
-                console.error("Error al asegurar las tablas en la base de datos:", err.message);
-            } else {
-                console.log("Tablas 'users' y 'records' verificadas/creadas en el volumen.");
-            }
+            if (err) console.error("Error al asegurar las tablas:", err.message);
         });
     }
 });
 
 
-// --- 4. RUTAS DE LA API ---
+// --- 4. RUTAS DE LA API PARA REGISTROS ---
 
-// == RUTAS EXISTENTES PARA LOS REGISTROS DE IMC ==
-
+// [GET] /api/records
 app.get('/api/records', (req, res) => {
-    const sql = "SELECT * FROM records ORDER BY fecha DESC, id DESC";
+    const sql = "SELECT * FROM records ORDER BY id DESC";
     db.all(sql, [], (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
+        if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
 });
 
+// [POST] /api/records
 app.post('/api/records', (req, res) => {
     const { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor } = req.body;
     const sql = `INSERT INTO records (sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    
     db.run(sql, [sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor], function(err) {
         if (err) {
-            if (err.message.includes('UNIQUE constraint failed')) {
-                return res.status(409).json({ message: `El CIP ${cip} ya tiene un registro en la fecha ${fecha}.` });
-            }
+            if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ message: `El CIP ${cip} ya tiene un registro en la fecha ${fecha}.` });
             return res.status(500).json({ error: err.message });
         }
         res.status(201).json({ message: "Registro guardado exitosamente", id: this.lastID });
     });
 });
 
-app.delete('/api/records/:cip', (req, res) => {
-    const { cip } = req.params;
-    const sql = "DELETE FROM records WHERE cip = ?";
+// [PUT] /api/records/:id - ACTUALIZA UN REGISTRO EXISTENTE
+app.put('/api/records/:id', (req, res) => {
+    const { id } = req.params;
+    const { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc } = req.body;
+    const sql = `UPDATE records SET 
+                    sexo = ?, cip = ?, grado = ?, apellido = ?, nombre = ?, 
+                    edad = ?, peso = ?, altura = ?, imc = ?
+                 WHERE id = ?`;
+    db.run(sql, [sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, id], function(err) {
+        if (err) return res.status(500).json({ message: "Error al actualizar el registro.", error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
+        res.json({ message: "Registro actualizado exitosamente." });
+    });
+});
 
-    db.run(sql, cip, function(err) {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
-        if (this.changes === 0) {
-            return res.status(404).json({ message: "Registro no encontrado para el CIP proporcionado." });
-        }
-        res.json({ message: `Registro con CIP ${cip} eliminado.` });
+// [DELETE] /api/records/:id
+app.delete('/api/records/:id', (req, res) => {
+    const { id } = req.params;
+    const sql = "DELETE FROM records WHERE id = ?";
+    db.run(sql, id, function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
+        res.json({ message: `Registro con ID ${id} eliminado.` });
     });
 });
 
 
-// == RUTA DE LOGIN (MODIFICADA PARA INCLUIR EL ROL) ==
+// --- RUTAS DE API PARA USUARIOS Y LOGIN ---
 
+// [POST] /api/login
 app.post('/api/login', (req, res) => {
     const { cip, password } = req.body;
-    if (!cip || !password) {
-        return res.status(400).json({ message: "CIP y contraseña son requeridos." });
-    }
-
+    if (!cip || !password) return res.status(400).json({ message: "CIP y contraseña son requeridos." });
     const sql = "SELECT * FROM users WHERE cip = ?";
     db.get(sql, [cip], (err, user) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
-        if (!user) {
-            return res.status(401).json({ message: "Credenciales de Usuario o Clave incorrectas." });
-        }
-
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(401).json({ message: "Credenciales incorrectas." });
         bcrypt.compare(password, user.password, (bcryptErr, result) => {
-            if (bcryptErr) {
-                return res.status(500).json({ message: "Error del servidor al verificar la contraseña." });
-            }
-            
+            if (bcryptErr) return res.status(500).json({ message: "Error del servidor." });
             if (result) {
-                // [MODIFICACIÓN CLAVE]
-                // Ahora la respuesta incluye el 'role' del usuario.
-                // El frontend usará esto para decidir si muestra o no la sección de gestión de usuarios.
-                res.json({
-                    message: "Login exitoso",
-                    user: { cip: user.cip, fullName: user.fullName, role: user.role }
-                });
+                res.json({ message: "Login exitoso", user: { cip: user.cip, fullName: user.fullName, role: user.role } });
             } else {
-                res.status(401).json({ message: "Credenciales de Usuario o Clave incorrectas." });
+                res.status(401).json({ message: "Credenciales incorrectas." });
             }
         });
     });
 });
 
-// == RUTAS PARA GESTIÓN DE USUARIOS ==
-
+// [GET] /api/users
 app.get('/api/users', (req, res) => {
     const sql = "SELECT cip, fullName, role FROM users";
     db.all(sql, [], (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
+        if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
 });
 
+// [POST] /api/users
 app.post('/api/users', (req, res) => {
     const { cip, fullName, password } = req.body;
-    if (!cip || !fullName || !password) {
-        return res.status(400).json({ message: "Todos los campos son requeridos." });
-    }
-
+    if (!cip || !fullName || !password) return res.status(400).json({ message: "Todos los campos son requeridos." });
     bcrypt.hash(password, 10, (err, hash) => {
-        if (err) {
-            return res.status(500).json({ message: "Error al encriptar la contraseña." });
-        }
-
-        // Todos los nuevos usuarios creados desde la web tendrán el rol 'admin' por defecto.
+        if (err) return res.status(500).json({ message: "Error al encriptar." });
         const sql = "INSERT INTO users (cip, fullName, password, role) VALUES (?, ?, ?, ?)";
         db.run(sql, [cip, fullName, hash, 'admin'], function(err) {
             if (err) {
-                if (err.message.includes('UNIQUE constraint failed')) {
-                    return res.status(409).json({ message: `El CIP ${cip} ya está registrado.` });
-                }
+                if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ message: `El CIP ${cip} ya está registrado.` });
                 return res.status(500).json({ error: err.message });
             }
             res.status(201).json({ message: "Usuario creado exitosamente", cip: cip });
@@ -177,21 +152,16 @@ app.post('/api/users', (req, res) => {
     });
 });
 
+// [DELETE] /api/users/:cip
 app.delete('/api/users/:cip', (req, res) => {
     const { cip } = req.params;
     const sql = "DELETE FROM users WHERE cip = ?";
-
     db.run(sql, cip, function(err) {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
-        if (this.changes === 0) {
-            return res.status(404).json({ message: "Usuario no encontrado." });
-        }
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "Usuario no encontrado." });
         res.json({ message: `Usuario con CIP ${cip} eliminado.` });
     });
 });
-
 
 // --- 5. INICIAR EL SERVIDOR ---
 app.listen(PORT, () => {
