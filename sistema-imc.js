@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL, COMPLETA Y FUNCIONAL CON ROLES)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON EDICIÓN Y ROLES)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
@@ -9,7 +9,8 @@ let currentAdminFullName = null;
 let currentUserRole = null;
 let allRecordsFromDB = [];
 let currentFilteredRecords = [];
-
+let isEditMode = false;
+let currentEditingRecordId = null;
 
 // --- 2. Funciones de Utilidad y UI ---
 
@@ -229,15 +230,15 @@ async function saveRecord(record) {
     }
 }
 
-async function deleteRecord(cip) {
-    if (!confirm(`¿Está seguro de que desea eliminar permanentemente el registro con CIP ${cip}?`)) return;
+async function deleteRecord(id) {
+    if (!confirm(`¿Está seguro de que desea eliminar permanentemente este registro?`)) return;
     try {
-        const response = await fetch(`/api/records/${cip}`, { method: 'DELETE' });
+        const response = await fetch(`/api/records/${id}`, { method: 'DELETE' });
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || 'Error al eliminar el registro.');
         }
-        displayMessage('ELIMINADO', `El registro con CIP ${cip} ha sido eliminado.`, 'warning');
+        displayMessage('ELIMINADO', `El registro ha sido eliminado.`, 'warning');
         await fetchAndDisplayRecords();
     } catch (error) {
         console.error('Error deleting record:', error);
@@ -324,6 +325,68 @@ async function handleDeleteUser(cip) {
     }
 }
 
+// --- FUNCIONES DE EDICIÓN DE REGISTROS ---
+
+function handleEditRecord(id) {
+    const recordToEdit = allRecordsFromDB.find(record => record.id === id);
+    if (!recordToEdit) {
+        displayMessage('Error', 'No se pudo encontrar el registro para editar.', 'error');
+        return;
+    }
+
+    document.getElementById('input-sex-admin').value = recordToEdit.sexo;
+    document.getElementById('input-userid').value = recordToEdit.cip;
+    document.getElementById('input-role').value = recordToEdit.grado;
+    document.getElementById('input-age-admin').value = recordToEdit.edad;
+    document.getElementById('input-lastname').value = recordToEdit.apellido;
+    document.getElementById('input-firstname').value = recordToEdit.nombre;
+    document.getElementById('input-weight-admin').value = recordToEdit.peso;
+    document.getElementById('input-height-admin').value = recordToEdit.altura;
+
+    const submitButton = document.querySelector('#admin-record-form button[type="submit"]');
+    submitButton.innerHTML = '<i class="fas fa-save mr-2"></i> ACTUALIZAR REGISTRO';
+    document.querySelector('#admin-record-form h3').innerHTML = '<i class="fas fa-pencil-alt mr-2 text-color-accent-lime"></i> EDITANDO REGISTRO DE PERSONAL';
+
+    isEditMode = true;
+    currentEditingRecordId = id;
+    document.getElementById('admin-record-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelEdit() {
+    isEditMode = false;
+    currentEditingRecordId = null;
+
+    document.getElementById('admin-record-form').reset();
+    const submitButton = document.querySelector('#admin-record-form button[type="submit"]');
+    submitButton.innerHTML = '<i class="fas fa-database mr-2"></i> GUARDAR Y CALCULAR APTITUD';
+    document.querySelector('#admin-record-form h3').innerHTML = '<i class="fas fa-user-plus mr-2 text-color-accent-lime"></i> REGISTRO DE NUEVO PERSONAL';
+    
+    document.getElementById('admin-result-box').classList.add('hidden');
+}
+
+async function updateRecord(id, recordData) {
+    try {
+        const response = await fetch(`/api/records/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(recordData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Error al actualizar el registro.');
+        }
+
+        displayMessage('ACTUALIZACIÓN EXITOSA', `El registro ha sido actualizado.`, 'success');
+        cancelEdit();
+        await fetchAndDisplayRecords();
+
+    } catch (error) {
+        console.error('Error updating record:', error);
+        displayMessage('Error al Actualizar', error.message, 'error');
+    }
+}
+
 
 // --- 6. Lógica de la Tabla de Registros (Filtros, Renderizado, Exportación) ---
 
@@ -396,6 +459,18 @@ function renderTable(records) {
         const row = tableBody.insertRow();
         row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
         
+        let actionButtons = '<span>N/A</span>';
+        if (currentUserRole === 'superadmin') {
+            actionButtons = `
+                <button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Editar Registro">
+                    <i class="fas fa-pencil-alt"></i>
+                </button>
+                <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            `;
+        }
+        
         row.innerHTML = `
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${data.cip || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">${data.grado || 'N/A'}</td>
@@ -406,11 +481,7 @@ function renderTable(records) {
             <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.sexo || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-center">
-                <button onclick="deleteRecord('${data.cip}')" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
-            </td>
+            <td class="px-4 py-3 whitespace-nowrap text-center">${actionButtons}</td>
         `;
     });
 }
@@ -464,15 +535,12 @@ document.getElementById('bmi-form').addEventListener('submit', function(e) {
     if (weight > 0 && height > 0) {
         const imc = calculateIMC(weight, height);
         const { resultado, detalle } = getAptitude(imc);
-
         const badgeClass = resultado.includes('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
-
         document.getElementById('bmi-value').textContent = imc;
         const aptitudeBadge = document.getElementById('aptitude-badge');
         aptitudeBadge.textContent = resultado;
         aptitudeBadge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
         document.getElementById('aptitude-detail').textContent = detalle;
-
         document.getElementById('result-box').classList.remove('hidden');
     } else {
         displayMessage('Datos Inválidos', 'Por favor, ingrese un peso y altura válidos.', 'error');
@@ -482,7 +550,7 @@ document.getElementById('bmi-form').addEventListener('submit', function(e) {
 document.getElementById('admin-record-form').addEventListener('submit', function(e) {
     e.preventDefault();
     if (!isAuthenticated) {
-        displayMessage('Acceso Denegado', 'Debe iniciar sesión para registrar personal.', 'error');
+        displayMessage('Acceso Denegado', 'Debe iniciar sesión para operar.', 'error');
         return;
     }
     const form = e.target;
@@ -494,6 +562,7 @@ document.getElementById('admin-record-form').addEventListener('submit', function
     const edad = parseInt(form.elements['input-age-admin'].value);
     const peso = parseFloat(form.elements['input-weight-admin'].value);
     const altura = parseFloat(form.elements['input-height-admin'].value);
+
     if (peso > 0 && altura > 0 && cip && grado && apellido && nombre && edad > 0) {
         const imc = calculateIMC(peso, altura);
         const { resultado, detalle } = getAptitude(imc);
@@ -503,13 +572,19 @@ document.getElementById('admin-record-form').addEventListener('submit', function
         document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
         document.getElementById('admin-aptitude-detail').textContent = detalle;
         document.getElementById('admin-result-box').classList.remove('hidden');
-        const now = new Date();
-        const day = String(now.getDate()).padStart(2, '0');
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const year = now.getFullYear();
-        const formattedDate = `${day}/${month}/${year}`;
-        const newRecord = { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: currentAdminUser };
-        saveRecord(newRecord);
+
+        if (isEditMode) {
+            const updatedRecord = { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc };
+            updateRecord(currentEditingRecordId, updatedRecord);
+        } else {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const formattedDate = `${day}/${month}/${year}`;
+            const newRecord = { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: currentAdminUser };
+            saveRecord(newRecord);
+        }
     } else {
         displayMessage('Error de Entrada', 'Por favor, complete todos los campos obligatorios.', 'error');
         document.getElementById('admin-result-box').classList.add('hidden');
