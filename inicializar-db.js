@@ -1,17 +1,16 @@
 // =================================================================================================
-// Archivo: inicializar-db.js (VERSIÓN FINAL - CREA AMBAS TABLAS)
+// Archivo: inicializar-db.js (VERSIÓN FINAL Y CORREGIDA PARA FLY.IO)
 // =================================================================================================
 
 const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
 
-// Asegurarnos de que usamos la ruta correcta
-const dbPath = path.join(__dirname, 'simcep');
-const db = new sqlite3.Database(dbPath, (err) => {
+// [CORREGIDO] Conexión a la base de datos en el volumen persistente de Fly.io
+const dbPath = '/data/simcep';
+const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
     if (err) {
-        return console.error("Error al conectar con la base de datos:", err.message);
+        return console.error("Error al conectar con la base de datos en el volumen:", err.message);
     }
-    console.log("Conectado a la base de datos SQLite 'simcep'.");
+    console.log("Conectado a la base de datos persistente 'simcep' para inicializar.");
 });
 
 // Usamos db.serialize para asegurar que los comandos se ejecutan en orden
@@ -30,12 +29,12 @@ db.serialize(() => {
         console.log("Tabla 'users' verificada/creada exitosamente.");
     });
 
-    // Comando 2: Crear la tabla de registros de IMC
+    // Comando 2: Crear la tabla de registros de IMC (con UNIQUE(cip, fecha))
     const createRecordsTableSql = `
         CREATE TABLE IF NOT EXISTS records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sexo TEXT,
-            cip TEXT UNIQUE,
+            cip TEXT,
             grado TEXT,
             apellido TEXT,
             nombre TEXT,
@@ -44,7 +43,8 @@ db.serialize(() => {
             altura REAL,
             imc REAL,
             fecha TEXT,
-            registradoPor TEXT
+            registradoPor TEXT,
+            UNIQUE(cip, fecha)
         );
     `;
     db.run(createRecordsTableSql, (err) => {

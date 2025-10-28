@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: crear-usuario.js (VERSIÓN FINAL Y CORREGIDA)
+// Archivo: crear-usuario.js (VERSIÓN FINAL Y CORREGIDA PARA FLY.IO)
 // =================================================================================================
 
 const sqlite3 = require('sqlite3').verbose();
@@ -12,19 +12,19 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-// Conexión a la base de datos
-const db = new sqlite3.Database('./simcep', (err) => {
+// [CORREGIDO] Conexión a la base de datos en el volumen persistente de Fly.io
+const dbPath = '/data/simcep';
+const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
-        console.error("Error al conectar con la base de datos:", err.message);
+        console.error("Error al conectar con la base de datos en el volumen:", err.message);
         return;
     }
-    console.log("Conectado a la base de datos para crear usuario.");
+    console.log("Conectado a la base de datos persistente para crear usuario.");
 });
 
 // Función principal para crear el usuario
 function crearUsuario() {
     rl.question('Ingrese el CIP del nuevo administrador: ', (cip) => {
-        // AQUÍ ESTABA EL ERROR: El parámetro debe ser una sola palabra, como "fullName"
         rl.question('Ingrese el Nombre Completo del nuevo administrador: ', (fullName) => {
             rl.question('Ingrese la contraseña para el nuevo administrador: ', (password) => {
                 
