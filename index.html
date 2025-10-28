@@ -137,12 +137,110 @@
                 <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center">
                     <i class="fas fa-user-plus mr-2 text-color-accent-lime"></i> REGISTRO DE NUEVO PERSONAL
                 </h3>
-                <form id="admin-record-form" class="space-y-4"></form>
+                <!-- INICIO DEL CÓDIGO AÑADIDO: Formulario de Registro de Personal -->
+                <form id="admin-record-form" class="space-y-4">
+                    <!-- Fila 1: CIP, Grado, Sexo, Edad -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label for="input-userid" class="label-tech">CIP (ID de Usuario)</label>
+                            <input type="text" id="input-userid" placeholder="Ej: E12345678" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-role" class="label-tech">Grado / Rol</label>
+                            <input type="text" id="input-role" placeholder="Ej: Tte, Sldo, Crl" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-sex-admin" class="label-tech">Sexo</label>
+                            <select id="input-sex-admin" required class="input-tech">
+                                <option value="Masculino">Masculino</option>
+                                <option value="Femenino">Femenino</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="input-age-admin" class="label-tech">Edad</label>
+                            <input type="number" id="input-age-admin" placeholder="Ej: 30" min="18" max="99" class="input-tech" required>
+                        </div>
+                    </div>
+                    
+                    <!-- Fila 2: Apellido, Nombre -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="input-lastname" class="label-tech">Apellido(s)</label>
+                            <input type="text" id="input-lastname" placeholder="Ej: VELASQUEZ" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-firstname" class="label-tech">Nombre(s)</label>
+                            <input type="text" id="input-firstname" placeholder="Ej: Luis Alberto" class="input-tech" required>
+                        </div>
+                    </div>
+                    
+                    <!-- Fila 3: Peso, Altura -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="input-weight-admin" class="label-tech">Peso (kg)</label>
+                            <input type="number" id="input-weight-admin" value="" placeholder="Ej: 75.5" min="20" step="0.1" required class="input-tech">
+                        </div>
+                        <div>
+                            <label for="input-height-admin" class="label-tech">Altura (metros)</label>
+                            <input type="number" id="input-height-admin" value="" placeholder="Ej: 1.75" min="0.5" step="0.01" required class="input-tech">
+                        </div>
+                    </div>
+
+                    <!-- Botón de Acción y Resultado -->
+                    <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6">
+                        <i class="fas fa-database mr-2"></i> GUARDAR Y CALCULAR APTITUD
+                    </button>
+                    <!-- Puedes descomentar el botón de cancelar edición si lo implementas completamente en JS -->
+                    <!-- <button type="button" onclick="cancelEdit()" class="btn-primary-tech btn-logout w-full mt-2 hidden" id="cancel-edit-button">
+                        <i class="fas fa-times mr-2"></i> CANCELAR EDICIÓN
+                    </button> -->
+                    
+                    <!-- Caja de Resultados de IMC (Admin) - Necesaria para la pre-visualización -->
+                    <div id="admin-result-box" class="mt-8 p-6 rounded-lg hidden border-l-4 border-color-accent-lime bg-color-green-darker result-box-tech">
+                        <h3 class="text-lg font-bold mb-4 text-color-accent-gold border-b border-color-border pb-2 flex items-center"><i class="fas fa-poll mr-2"></i> Resultado Pre-Cálculo</h3>
+                        <div class="flex flex-col sm:flex-row justify-between items-center text-center sm:text-left">
+                            <div>
+                                <p class="text-sm text-color-text-muted">Índice de Masa Corporal:</p>
+                                <p class="text-5xl font-extrabold leading-none tracking-tighter" id="admin-bmi-value" style="color:var(--color-accent-lime);">--</p>
+                            </div>
+                            <div class="mt-4 sm:mt-0 text-right">
+                                <p class="text-sm text-color-text-muted mb-1">Diagnóstico de Aptitud:</p>
+                                <span id="admin-aptitude-badge" class="aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase"></span>
+                                <p id="admin-aptitude-detail" class="text-xs mt-2 text-color-text-muted italic"></p>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+                <!-- FIN DEL CÓDIGO AÑADIDO: Formulario de Registro de Personal -->
             </div>
             
             <h3 class="text-xl font-bold text-color-accent-gold mb-4 mt-6 border-b border-color-border pb-2 flex items-center col-span-full"><i class="fas fa-table mr-2 text-color-primary-green"></i> REGISTROS OPERACIONALES</h3>
             
-            <div class="flex flex-wrap items-end gap-4 mb-6"></div>
+            <!-- INICIO DEL CÓDIGO AÑADIDO: Filtros y Botón de Exportación -->
+            <div class="flex flex-wrap items-end gap-4 mb-6">
+                <div class="flex-1 min-w-[200px]">
+                    <label for="name-filter" class="label-tech">Filtrar por Apellido/Nombre</label>
+                    <input type="text" id="name-filter" placeholder="Escriba aquí..." class="input-tech">
+                </div>
+                <div class="min-w-[120px]">
+                    <label for="age-filter" class="label-tech">Filtrar por Edad</label>
+                    <input type="number" id="age-filter" placeholder="Ej: 30" min="18" max="99" class="input-tech">
+                </div>
+                <div class="flex-1 min-w-[200px]">
+                    <label for="month-filter" class="label-tech">Filtrar por Mes</label>
+                    <select id="month-filter" class="input-tech">
+                        <option value="">Todos los Meses</option>
+                        <!-- Opciones generadas por JS -->
+                    </select>
+                </div>
+                <div class="ml-auto">
+                    <button id="export-word-button" class="btn-primary-tech btn-calculate px-6 py-3 min-w-[150px]">
+                        <i class="fas fa-file-word mr-2"></i> EXPORTAR
+                    </button>
+                </div>
+            </div>
+            <!-- FIN DEL CÓDIGO AÑADIDO: Filtros y Botón de Exportación -->
+
             <div class="overflow-x-auto table-container rounded-xl shadow-2xl p-2 col-span-full">
                 <table class="min-w-full divide-y divide-color-border">
                     <thead>
@@ -157,7 +255,25 @@
                     <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center">
                         <i class="fas fa-user-shield mr-2 text-color-accent-lime"></i> AÑADIR NUEVO ADMINISTRADOR
                     </h3>
-                    <form id="add-user-form" class="space-y-4"></form>
+                    <!-- INICIO DEL CÓDIGO AÑADIDO: Formulario de Nuevo Administrador -->
+                    <form id="add-user-form" class="space-y-4">
+                        <div>
+                            <label for="input-new-cip" class="label-tech">ID de Usuario (CIP)</label>
+                            <input type="text" id="input-new-cip" placeholder="Ej: FPACHECOV" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-new-fullname" class="label-tech">Nombre Completo</label>
+                            <input type="text" id="input-new-fullname" placeholder="Ej: Francis Pacheco Valverde" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-new-password" class="label-tech">Clave Secreta</label>
+                            <input type="password" id="input-new-password" placeholder="•••••••••" class="input-tech" required>
+                        </div>
+                        <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6">
+                            <i class="fas fa-user-plus mr-2"></i> CREAR ADMINISTRADOR
+                        </button>
+                    </form>
+                    <!-- FIN DEL CÓDIGO AÑADIDO: Formulario de Nuevo Administrador -->
                 </div>
                 <div class="card-tech">
                     <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center">
