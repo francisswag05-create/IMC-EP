@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CON VERIFICACIÓN DE ELEMENTOS)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON EDICIÓN Y ROLES DE ACCESO)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
@@ -62,8 +62,8 @@ async function updateUI() {
         userInfo.classList.remove('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
         userInfo.classList.add('text-color-accent-lime', 'border-gray-600');
         
-        if (document.getElementById('admin-username')) document.getElementById('admin-username').value = '';
-        if (document.getElementById('admin-password')) document.getElementById('admin-password').value = '';
+        document.getElementById('admin-username').value = '';
+        document.getElementById('admin-password').value = '';
 
         if (monitoringTextEl) {
             monitoringTextEl.innerHTML = '¡Sistema en espera! Inicie sesión para activar el monitoreo.';
@@ -324,7 +324,6 @@ async function updateRecord(id, recordData) {
 
 function populateMonthFilter() {
     const filterSelect = document.getElementById('month-filter');
-    if (!filterSelect) return;
     const monthCounts = allRecordsFromDB.reduce((acc, record) => {
         if (!record.fecha) return acc;
         const monthYear = record.fecha.substring(3); 
@@ -349,19 +348,14 @@ function populateMonthFilter() {
 }
 
 function filterTable() {
-    const nameFilter = document.getElementById('name-filter');
-    const ageFilter = document.getElementById('age-filter');
-    const monthFilter = document.getElementById('month-filter');
-    if (!nameFilter || !ageFilter || !monthFilter) return;
-
-    const nameSearch = nameFilter.value.toLowerCase().trim();
-    const ageValue = ageFilter.value;
-    const monthValue = monthFilter.value;
+    const nameSearch = document.getElementById('name-filter').value.toLowerCase().trim();
+    const ageFilter = document.getElementById('age-filter').value;
+    const monthFilter = document.getElementById('month-filter').value;
     
     currentFilteredRecords = allRecordsFromDB.filter(rec => {
         const nameMatch = !nameSearch || `${rec.apellido} ${rec.nombre}`.toLowerCase().includes(nameSearch);
-        const ageMatch = !ageValue || rec.edad === parseInt(ageValue);
-        const monthMatch = !monthValue || (rec.fecha && rec.fecha.substring(3) === monthValue);
+        const ageMatch = !ageFilter || rec.edad === parseInt(ageFilter);
+        const monthMatch = !monthFilter || (rec.fecha && rec.fecha.substring(3) === monthFilter);
         return nameMatch && ageMatch && monthMatch;
     });
     renderTable(currentFilteredRecords);
@@ -369,7 +363,6 @@ function filterTable() {
 
 function renderTable(records) {
     const tableBody = document.getElementById('admin-table-body');
-    if (!tableBody) return;
     tableBody.innerHTML = '';
     if (!isAuthenticated) return tableBody.innerHTML = `<tr><td colspan="10" class="text-center py-4">No está autenticado.</td></tr>`;
     if (records.length === 0) return tableBody.innerHTML = `<tr><td colspan="10" class="text-center py-10">No hay registros que coincidan.</td></tr>`;
@@ -403,124 +396,80 @@ function renderTable(records) {
 }
 
 function exportToWord() {
-    if (!isAuthenticated) return displayMessage('Acceso Denegado', 'Debe iniciar sesión.', 'error');
-    if (currentFilteredRecords.length === 0) return displayMessage('Sin Datos', 'No hay registros para exportar.', 'warning');
-    // ... Tu código de exportación (sin cambios)
+    // ... (Tu función de exportar a Word no necesita cambios) ...
 }
 
 // --- 7. Event Listeners ---
 
+document.getElementById('bmi-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const weight = parseFloat(document.getElementById('input-weight').value);
+    const height = parseFloat(document.getElementById('input-height').value);
+    if (weight > 0 && height > 0) {
+        const imc = calculateIMC(weight, height);
+        const { resultado, detalle } = getAptitude(imc);
+        const badgeClass = resultado.includes('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
+        document.getElementById('bmi-value').textContent = imc;
+        const aptitudeBadge = document.getElementById('aptitude-badge');
+        aptitudeBadge.textContent = resultado;
+        aptitudeBadge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
+        document.getElementById('aptitude-detail').textContent = detalle;
+        document.getElementById('result-box').classList.remove('hidden');
+    } else {
+        displayMessage('Datos Inválidos', 'Por favor, ingrese un peso y altura válidos.', 'error');
+    }
+});
+
+document.getElementById('admin-record-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    if (!isAuthenticated) return displayMessage('Acceso Denegado', 'Debe iniciar sesión.', 'error');
+
+    const form = e.target;
+    const sexo = form.elements['input-sex-admin'].value;
+    const cip = form.elements['input-userid'].value;
+    const grado = form.elements['input-role'].value;
+    const apellido = form.elements['input-lastname'].value;
+    const nombre = form.elements['input-firstname'].value;
+    const edad = parseInt(form.elements['input-age-admin'].value);
+    const peso = parseFloat(form.elements['input-weight-admin'].value);
+    const altura = parseFloat(form.elements['input-height-admin'].value);
+
+    if (peso > 0 && altura > 0 && cip && grado && apellido && nombre && edad > 0) {
+        const imc = calculateIMC(peso, altura);
+        const { resultado, detalle } = getAptitude(imc);
+        const badgeClass = getSimplifiedAptitudeStyle(resultado);
+        document.getElementById('admin-bmi-value').textContent = imc;
+        document.getElementById('admin-aptitude-badge').textContent = resultado;
+        document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
+        document.getElementById('admin-aptitude-detail').textContent = detalle;
+        document.getElementById('admin-result-box').classList.remove('hidden');
+
+        if (isEditMode) {
+            const updatedRecord = { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc };
+            updateRecord(currentEditingRecordId, updatedRecord);
+        } else {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const formattedDate = `${day}/${month}/${year}`;
+            const newRecord = { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: currentAdminUser };
+            saveRecord(newRecord);
+        }
+    } else {
+        displayMessage('Error de Entrada', 'Por favor, complete todos los campos.', 'error');
+        document.getElementById('admin-result-box').classList.add('hidden');
+    }
+});
+
+document.getElementById('admin-login-button').addEventListener('click', attemptAdminLogin);
+document.getElementById('logout-button').addEventListener('click', logoutAdmin);
+document.getElementById('export-word-button').addEventListener('click', exportToWord);
+document.getElementById('name-filter').addEventListener('input', filterTable);
+document.getElementById('age-filter').addEventListener('input', filterTable);
+document.getElementById('month-filter').addEventListener('change', filterTable);
+document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
+
 document.addEventListener('DOMContentLoaded', () => {
-    
     updateUI();
-
-    const bmiForm = document.getElementById('bmi-form');
-    if (bmiForm) {
-        bmiForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const weight = parseFloat(document.getElementById('input-weight').value);
-            const height = parseFloat(document.getElementById('input-height').value);
-            if (weight > 0 && height > 0) {
-                const imc = calculateIMC(weight, height);
-                const { resultado, detalle } = getAptitude(imc);
-                const badgeClass = resultado.includes('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
-                document.getElementById('bmi-value').textContent = imc;
-                const aptitudeBadge = document.getElementById('aptitude-badge');
-                aptitudeBadge.textContent = resultado;
-                aptitudeBadge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
-                document.getElementById('aptitude-detail').textContent = detalle;
-                document.getElementById('result-box').classList.remove('hidden');
-            } else {
-                displayMessage('Datos Inválidos', 'Ingrese un peso y altura válidos.', 'error');
-            }
-        });
-    }
-
-    const adminRecordForm = document.getElementById('admin-record-form');
-    if (adminRecordForm) {
-        adminRecordForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            if (!isAuthenticated) return displayMessage('Acceso Denegado', 'Debe iniciar sesión.', 'error');
-
-            const form = e.target;
-            const sexo = form.elements['input-sex-admin'].value;
-            const cip = form.elements['input-userid'].value;
-            const grado = form.elements['input-role'].value;
-            const apellido = form.elements['input-lastname'].value;
-            const nombre = form.elements['input-firstname'].value;
-            const edad = parseInt(form.elements['input-age-admin'].value);
-            const peso = parseFloat(form.elements['input-weight-admin'].value);
-            const altura = parseFloat(form.elements['input-height-admin'].value);
-
-            if (peso > 0 && altura > 0 && cip && grado && apellido && nombre && edad > 0) {
-                const imc = calculateIMC(peso, altura);
-                const { resultado, detalle } = getAptitude(imc);
-                const badgeClass = getSimplifiedAptitudeStyle(resultado);
-                document.getElementById('admin-bmi-value').textContent = imc;
-                document.getElementById('admin-aptitude-badge').textContent = resultado;
-                document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
-                document.getElementById('admin-aptitude-detail').textContent = detalle;
-                document.getElementById('admin-result-box').classList.remove('hidden');
-
-                if (isEditMode) {
-                    const updatedRecord = { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc };
-                    updateRecord(currentEditingRecordId, updatedRecord);
-                } else {
-                    const now = new Date();
-                    const day = String(now.getDate()).padStart(2, '0');
-                    const month = String(now.getMonth() + 1).padStart(2, '0');
-                    const year = now.getFullYear();
-                    const formattedDate = `${day}/${month}/${year}`;
-                    const newRecord = { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: currentAdminUser };
-                    saveRecord(newRecord);
-                }
-            } else {
-                displayMessage('Error de Entrada', 'Por favor, complete todos los campos.', 'error');
-                document.getElementById('admin-result-box').classList.add('hidden');
-            }
-        });
-    }
-
-    const adminLoginButton = document.getElementById('admin-login-button');
-    if (adminLoginButton) adminLoginButton.addEventListener('click', attemptAdminLogin);
-    
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) logoutButton.addEventListener('click', logoutAdmin);
-
-    const exportButton = document.getElementById('export-word-button');
-    if (exportButton) exportButton.addEventListener('click', exportToWord);
-
-    const nameFilter = document.getElementById('name-filter');
-    if (nameFilter) nameFilter.addEventListener('input', filterTable);
-    
-    const ageFilter = document.getElementById('age-filter');
-    if (ageFilter) ageFilter.addEventListener('input', filterTable);
-
-    const monthFilter = document.getElementById('month-filter');
-    if (monthFilter) monthFilter.addEventListener('change', filterTable);
-
-    const addUserForm = document.getElementById('add-user-form');
-    if (addUserForm) addUserForm.addEventListener('submit', handleAddUser);
-
-    const forgotPasswordLink = document.getElementById('forgot-password-link');
-    if (forgotPasswordLink) {
-        forgotPasswordLink.addEventListener('click', async (e) => {
-            e.preventDefault();
-            const cip = prompt("Ingrese su CIP para iniciar la recuperación de contraseña:");
-            if (!cip) return;
-            try {
-                displayMessage('Procesando...', 'Enviando solicitud...', 'warning');
-                const response = await fetch('/api/forgot-password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cip: cip.trim() })
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.message);
-                displayMessage('Verifique su Correo', data.message, 'success');
-            } catch (error) {
-                displayMessage('Error', error.message, 'error');
-            }
-        });
-    }
 });
