@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restablecer Contraseña - SIMCEP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"> 
+    <link rel="icon" type="image/jpeg" href="./imagenes/simcep.jpg">
+</head>
+<body class="font-sans antialiased flex flex-col min-h-screen">
+    <header class="text-white p-2 shadow-xl sticky top-0 z-20 header-bar">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="header-content-v2" style="display: flex; align-items: center;">
+                <img src="./imagenes/simcep.jpg" alt="Logo SIMCEP" class="header-logo-image" style="width: 35px; height: auto; margin-right: 0.75rem;">
+                <div class="header-text-v2" style="display: flex; flex-direction: column;">
+                    <h1 class="header-simcep-v2" style="font-size: 1.75rem; font-weight: 900; letter-spacing: 0.05em; line-height: 1.1; color: #FFD700; margin: 0; padding: 0;">SIMCEP</h1>
+                    <span class="header-subtitle-v2" style="font-size: 0.6rem; font-weight: 500; color: #A0A0A0; margin-top: 0.1rem; line-height: 1;">Sistema de Índice de Masa Corporal del Ejército del Perú</span>
+                </div>
+            </div>
+        </div>
+    </header>
+    <main class="flex-grow container mx-auto p-4 flex items-center justify-center">
+        <div class="w-full max-w-md">
+            <div id="message-box" class="hidden mb-4"></div>
+            <div class="card-tech">
+                <h2 class="text-2xl font-bold mb-6 text-center" style="color: #FFD700;">Restablecer Contraseña</h2>
+                <form id="reset-form" class="space-y-6">
+                    <input type="hidden" id="reset-token">
+                    <div>
+                        <label for="new-password" class="label-tech">Nueva Contraseña</label>
+                        <input type="password" id="new-password" class="input-tech" required placeholder="•••••••••">
+                    </div>
+                    <div>
+                        <label for="confirm-password" class="label-tech">Confirmar Nueva Contraseña</label>
+                        <input type="password" id="confirm-password" class="input-tech" required placeholder="•••••••••">
+                    </div>
+                    <button type="submit" class="btn-primary-tech btn-calculate w-full">Cambiar Contraseña</button>
+                </form>
+            </div>
+        </div>
+    </main>
+    <footer class="bg-color-green-dark text-color-text-muted text-center p-4 mt-12 border-t border-color-border">
+        <p class="text-sm tracking-wider">&copy; 2025 III División del Ejército del Perú. <span class="text-color-primary-green font-bold">Patria y Honor.</span></p>
+    </footer>
+    <script src="reset.js"></script>
+</body>
+</html>
