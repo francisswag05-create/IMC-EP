@@ -23,9 +23,9 @@ const db = new sqlite3.Database('./simcep', (err) => {
 
 // --- Función principal para crear el usuario ---
 function crearUsuario() {
-    rl.question('Ingrese el CIP del nuevo administrador: ', (cip) => {
-        rl.question('Ingrese el Nombre Completo del nuevo administrador: ', (fullName) => {
-            rl.question('Ingrese la contraseña para el nuevo administrador: ', (password) => {
+    rl.question('Ingrese el CIP del nuevo administrador: ', (rriverost) => {
+        rl.question('Ingrese el Nombre Completo del nuevo administrador: ', (Riveros Tarazona Renan) => {
+            rl.question('Ingrese la contraseña para el nuevo administrador: ', (rriverost) => {
                 
                 if (!cip || !fullName || !password) {
                     console.error("\n[ERROR] Todos los campos son obligatorios. Proceso cancelado.");
