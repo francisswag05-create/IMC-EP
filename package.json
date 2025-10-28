@@ -1,19 +1,18 @@
-"dependencies": {
-  "bcrypt": "^5.1.1",
-  "express": "^4.18.2",
-  "sqlite3": "^5.1.6"
+{
+  "name": "simcep-imc-ep",
+  "version": "1.0.0",
+  "description": "Sistema de Índice de Masa Corporal del Ejército del Perú.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "crear-usuario": "node crear-usuario.js"
+  },
+  "author": "Tu Nombre Aquí",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.7"
+  }
 }
-```2.  **Abre tu archivo `server.js`**. Asegúrate de que las funciones de login y registro de usuarios sean las versiones **seguras**, las que usan `bcrypt`. Te las dejo aquí de nuevo para que las copies y pegues, reemplazando las que tengas:
-
-```javascript
-// Función de Login SEGURA
-app.post('/api/login', (req, res) => {
-    const { cip, password } = req.body;
-    // ... (el resto del código de login con bcrypt.compare)
-});
-
-// Función de Registro SEGURA
-app.post('/api/users', async (req, res) => {
-    const { cip, fullName, password, role } = req.body;
-    // ... (el resto del código de registro con bcrypt.hash)
-});
