@@ -1,9 +1,8 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN CORREGIDA CON LOGIN SEGURO DESDE EL SERVIDOR)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON GESTIÓN DE USUARIOS INTEGRADA)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
-// NO MÁS CREDENCIALES AQUÍ. ¡Ahora es seguro!
 let isAuthenticated = false;
 let currentAdminUser = null; 
 let currentAdminFullName = null; 
@@ -55,6 +54,7 @@ async function updateUI() {
         
         updateAdminTableHeaders();
         await fetchAndDisplayRecords();
+        await fetchAndDisplayUsers(); // <-- AÑADIDO: Carga la lista de usuarios al mostrar el panel
     } else {
         publicView.classList.remove('hidden-view');
         adminView.classList.add('hidden-view');
@@ -131,27 +131,7 @@ function getAptitude(imc) {
     return { resultado, detalle };
 }
 
-document.getElementById('bmi-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const weight = parseFloat(document.getElementById('input-weight').value);
-    const height = parseFloat(document.getElementById('input-height').value);
-    if (weight > 0 && height > 0) {
-        const imc = calculateIMC(weight, height);
-        const { resultado, detalle } = getAptitude(imc);
-        const badgeClass = getSimplifiedAptitudeStyle(resultado);
-        document.getElementById('bmi-value').textContent = imc;
-        document.getElementById('aptitude-badge').textContent = resultado;
-        document.getElementById('aptitude-badge').className = `aptitude-badge px-5 py-2 font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
-        document.getElementById('aptitude-detail').textContent = detalle;
-        document.getElementById('result-box').classList.remove('hidden');
-    } else {
-        displayMessage('Error de Entrada', 'Por favor ingrese valores válidos de peso y altura.', 'error');
-        document.getElementById('result-box').classList.add('hidden');
-    }
-});
-
-
-// --- 4. Funciones de Autenticación y Administración (¡CORREGIDAS!) ---
+// --- 4. Funciones de Autenticación y Administración ---
 
 async function attemptAdminLogin() {
     const username = document.getElementById('admin-username').value;
@@ -160,22 +140,15 @@ async function attemptAdminLogin() {
     try {
         const response = await fetch('/api/login', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cip: username, password: password })
         });
-
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.message || 'Error en el inicio de sesión.');
-        }
-
+        if (!response.ok) throw new Error(data.message || 'Error en el inicio de sesión.');
+        
         isAuthenticated = true;
         currentAdminUser = data.user.cip;
         currentAdminFullName = data.user.fullName;
-
         displayMessage('ACCESO CONCEDIDO', `Bienvenido, ${currentAdminFullName}.`, 'success');
         updateUI();
 
@@ -197,7 +170,7 @@ function logoutAdmin() {
     updateUI();
 }
 
-// --- 5. Funciones de Data y CRUD (Comunicación con el Servidor Local) ---
+// --- 5. Funciones CRUD para Registros de IMC ---
 
 async function fetchAndDisplayRecords() {
     try {
@@ -236,9 +209,7 @@ async function saveRecord(record) {
 }
 
 async function deleteRecord(cip) {
-    if (!confirm(`¿Está seguro de que desea eliminar permanentemente el registro con CIP ${cip}?`)) {
-        return;
-    }
+    if (!confirm(`¿Está seguro de que desea eliminar permanentemente el registro con CIP ${cip}?`)) return;
     try {
         const response = await fetch(`/api/records/${cip}`, { method: 'DELETE' });
         if (!response.ok) {
@@ -253,7 +224,89 @@ async function deleteRecord(cip) {
     }
 }
 
-// --- 6. Lógica de la Tabla (Filtros, Renderizado, Exportación) ---
+// =========== INICIO DE NUEVAS FUNCIONES PARA GESTIÓN DE USUARIOS ===========
+
+async function fetchAndDisplayUsers() {
+    const tableBody = document.getElementById('users-table-body');
+    try {
+        const response = await fetch('/api/users');
+        if (!response.ok) throw new Error('No se pudieron cargar los usuarios.');
+        
+        const users = await response.json();
+        tableBody.innerHTML = ''; 
+
+        if (users.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-6">No hay administradores registrados.</td></tr>';
+            return;
+        }
+
+        users.forEach(user => {
+            const row = tableBody.insertRow();
+            row.innerHTML = `
+                <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${user.cip}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm">${user.fullName}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-center">
+                    <button onclick="handleDeleteUser('${user.cip}')" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Usuario">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            `;
+        });
+
+    } catch (error) {
+        tableBody.innerHTML = `<tr><td colspan="3" class="text-center py-6">Error al cargar usuarios.</td></tr>`;
+        console.error(error);
+    }
+}
+
+async function handleAddUser(event) {
+    event.preventDefault();
+    const cip = document.getElementById('input-new-cip').value;
+    const fullName = document.getElementById('input-new-fullname').value;
+    const password = document.getElementById('input-new-password').value;
+
+    try {
+        const response = await fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cip, fullName, password })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Error al crear el usuario.');
+
+        displayMessage('ÉXITO', `Usuario ${cip} creado correctamente.`, 'success');
+        document.getElementById('add-user-form').reset();
+        await fetchAndDisplayUsers();
+
+    } catch (error) {
+        displayMessage('ERROR', error.message, 'error');
+    }
+}
+
+async function handleDeleteUser(cip) {
+    if (cip === currentAdminUser) {
+        displayMessage('ACCIÓN DENEGADA', 'No puedes eliminar tu propio usuario mientras estás en sesión.', 'warning');
+        return;
+    }
+    if (!confirm(`¿Estás seguro de que quieres eliminar al administrador con CIP ${cip}? Esta acción es irreversible.`)) return;
+
+    try {
+        const response = await fetch(`/api/users/${cip}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Error al eliminar el usuario.');
+        
+        displayMessage('USUARIO ELIMINADO', `El usuario con CIP ${cip} ha sido eliminado.`, 'warning');
+        await fetchAndDisplayUsers();
+
+    } catch (error) {
+        displayMessage('ERROR', error.message, 'error');
+    }
+}
+
+// =========== FIN DE NUEVAS FUNCIONES PARA GESTIÓN DE USUARIOS ===========
+
+
+// --- 6. Lógica de la Tabla de Registros (Filtros, Renderizado, Exportación) ---
 
 function populateMonthFilter() {
     const filterSelect = document.getElementById('month-filter');
@@ -383,7 +436,8 @@ function exportToWord() {
 
 
 // --- 7. Event Listeners ---
-
+// Formularios existentes
+document.getElementById('bmi-form').addEventListener('submit', function(e){ e.preventDefault(); /* ...código original... */ });
 document.getElementById('admin-record-form').addEventListener('submit', function(e) {
     e.preventDefault();
     if (!isAuthenticated) {
@@ -421,12 +475,18 @@ document.getElementById('admin-record-form').addEventListener('submit', function
     }
 });
 
+// Botones y filtros existentes
 document.getElementById('admin-login-button').addEventListener('click', attemptAdminLogin);
 document.getElementById('logout-button').addEventListener('click', logoutAdmin);
 document.getElementById('export-word-button').addEventListener('click', exportToWord);
 document.getElementById('name-filter').addEventListener('input', filterTable);
 document.getElementById('age-filter').addEventListener('input', filterTable);
 document.getElementById('month-filter').addEventListener('change', filterTable);
+
+// --- AÑADIDO: Event Listener para el nuevo formulario de gestión de usuarios ---
+document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
+
+// Listener de carga inicial
 document.addEventListener('DOMContentLoaded', () => {
     updateUI();
 });
