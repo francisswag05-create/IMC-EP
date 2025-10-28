@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: server.js (COMPLETO Y ACTUALIZADO)
+// Archivo: server.js (COMPLETO Y ACTUALIZADO PARA FLY.IO CON VOLUMEN PERSISTENTE)
 // =================================================================================================
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
@@ -7,24 +7,55 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const path = require('path');
-const cors = require('cors'); // Se recomienda para flexibilidad en el desarrollo
+const cors = require('cors'); 
 
 const app = express();
-const PORT = process.env.PORT || 3000; // Puerto para el servidor
+const PORT = process.env.PORT || 3000; 
 
 // --- 2. MIDDLEWARE ---
-app.use(cors()); // Habilita CORS para todas las rutas
-app.use(express.json()); // Permite al servidor entender y procesar JSON
-// Sirve los archivos estáticos (HTML, CSS, JS del cliente) desde el directorio raíz
+app.use(cors()); 
+app.use(express.json()); 
 app.use(express.static(path.join(__dirname, '/'))); 
 
-// --- 3. CONEXIÓN A LA BASE DE DATOS SQLITE ---
-// Asegúrate de que tu archivo de base de datos se llame 'simcep' y esté en la misma carpeta
-const db = new sqlite3.Database('./simcep', sqlite3.OPEN_READWRITE, (err) => {
+// --- 3. CONEXIÓN A LA BASE DE DATOS SQLITE (MODIFICADO PARA VOLUMEN PERSISTENTE) ---
+// La ruta ahora apunta a la carpeta /data donde el volumen está montado en Fly.io.
+const dbPath = '/data/simcep';
+
+const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
     if (err) {
-        console.error("Error al conectar con la base de datos:", err.message);
+        console.error("Error al conectar con la base de datos en el volumen:", err.message);
     } else {
-        console.log("Conexión a la base de datos SQLite establecida con éxito.");
+        console.log("Conexión a la base de datos SQLite en el volumen '/data' establecida con éxito.");
+        // Opcional: Asegurarse de que las tablas existan al iniciar el servidor
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS users (
+                cip TEXT PRIMARY KEY,
+                fullName TEXT NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sexo TEXT,
+                cip TEXT,
+                grado TEXT,
+                apellido TEXT,
+                nombre TEXT,
+                edad INTEGER,
+                peso REAL,
+                altura REAL,
+                imc REAL,
+                fecha TEXT,
+                registradoPor TEXT,
+                UNIQUE(cip, fecha)
+            );
+        `, (err) => {
+            if (err) {
+                console.error("Error al asegurar las tablas en la base de datos:", err.message);
+            } else {
+                console.log("Tablas 'users' y 'records' verificadas/creadas en el volumen.");
+            }
+        });
     }
 });
 
@@ -35,7 +66,7 @@ const db = new sqlite3.Database('./simcep', sqlite3.OPEN_READWRITE, (err) => {
 
 // [GET] /api/records - Obtiene todos los registros de IMC
 app.get('/api/records', (req, res) => {
-    const sql = "SELECT * FROM records ORDER BY fecha DESC"; // Asumiendo que tu tabla se llama 'records'
+    const sql = "SELECT * FROM records ORDER BY fecha DESC, id DESC";
     db.all(sql, [], (err, rows) => {
         if (err) {
             return res.status(500).json({ error: err.message });
@@ -47,6 +78,9 @@ app.get('/api/records', (req, res) => {
 // [POST] /api/records - Guarda un nuevo registro de IMC
 app.post('/api/records', (req, res) => {
     const { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor } = req.body;
+    // He corregido un pequeño error en tu diseño original: El CIP no puede ser UNIQUE por sí solo
+    // si quieres registrar el mismo personal en diferentes fechas. La combinación de CIP y Fecha debe ser única.
+    // La sentencia CREATE TABLE de arriba ya lo refleja con UNIQUE(cip, fecha).
     const sql = `INSERT INTO records (sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     db.run(sql, [sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor], function(err) {
@@ -77,7 +111,7 @@ app.delete('/api/records/:cip', (req, res) => {
 });
 
 
-// == RUTA DE LOGIN (TU CÓDIGO) ==
+// == RUTA DE LOGIN ==
 
 // [POST] /api/login - Maneja el inicio de sesión de forma segura
 app.post('/api/login', (req, res) => {
@@ -86,7 +120,7 @@ app.post('/api/login', (req, res) => {
         return res.status(400).json({ message: "CIP y contraseña son requeridos." });
     }
 
-    const sql = "SELECT * FROM users WHERE cip = ?"; // Asumiendo que tu tabla de usuarios se llama 'users'
+    const sql = "SELECT * FROM users WHERE cip = ?";
     db.get(sql, [cip], (err, user) => {
         if (err) {
             return res.status(500).json({ error: err.message });
@@ -112,7 +146,7 @@ app.post('/api/login', (req, res) => {
     });
 });
 
-// =========== INICIO DE LAS NUEVAS RUTAS PARA GESTIÓN DE USUARIOS ===========
+// == RUTAS PARA GESTIÓN DE USUARIOS ==
 
 // [GET] /api/users - Obtiene todos los usuarios (de forma segura, sin contraseñas)
 app.get('/api/users', (req, res) => {
@@ -132,14 +166,12 @@ app.post('/api/users', (req, res) => {
         return res.status(400).json({ message: "Todos los campos son requeridos." });
     }
 
-    // Encriptamos la nueva contraseña antes de guardarla
     bcrypt.hash(password, 10, (err, hash) => {
         if (err) {
             return res.status(500).json({ message: "Error al encriptar la contraseña." });
         }
 
         const sql = "INSERT INTO users (cip, fullName, password, role) VALUES (?, ?, ?, ?)";
-        // Por defecto, creamos usuarios con el rol 'admin'
         db.run(sql, [cip, fullName, hash, 'admin'], function(err) {
             if (err) {
                 if (err.message.includes('UNIQUE constraint failed')) {
@@ -167,8 +199,6 @@ app.delete('/api/users/:cip', (req, res) => {
         res.json({ message: `Usuario con CIP ${cip} eliminado.` });
     });
 });
-
-// =========== FIN DE LAS NUEVAS RUTAS PARA GESTIÓN DE USUARIOS ===========
 
 
 // --- 5. INICIAR EL SERVIDOR ---
