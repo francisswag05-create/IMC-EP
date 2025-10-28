@@ -1,18 +1,18 @@
 // =================================================================================================
-// Archivo: crear-usuario.js (Script para crear administradores desde la terminal)
+// Archivo: crear-usuario.js (VERSIÓN FINAL Y CORREGIDA)
 // =================================================================================================
 
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const readline = require('readline');
 
-// --- Configuración para la entrada de datos en la terminal ---
+// Configuración para la entrada de datos en la terminal
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
 
-// --- Conexión a la base de datos ---
+// Conexión a la base de datos
 const db = new sqlite3.Database('./simcep', (err) => {
     if (err) {
         console.error("Error al conectar con la base de datos:", err.message);
@@ -21,11 +21,12 @@ const db = new sqlite3.Database('./simcep', (err) => {
     console.log("Conectado a la base de datos para crear usuario.");
 });
 
-// --- Función principal para crear el usuario ---
+// Función principal para crear el usuario
 function crearUsuario() {
-    rl.question('Ingrese el CIP del nuevo administrador: ', (rriverost) => {
-        rl.question('Ingrese el Nombre Completo del nuevo administrador: ', (Riveros Tarazona Renan) => {
-            rl.question('Ingrese la contraseña para el nuevo administrador: ', (rriverost) => {
+    rl.question('Ingrese el CIP del nuevo administrador: ', (cip) => {
+        // AQUÍ ESTABA EL ERROR: El parámetro debe ser una sola palabra, como "fullName"
+        rl.question('Ingrese el Nombre Completo del nuevo administrador: ', (fullName) => {
+            rl.question('Ingrese la contraseña para el nuevo administrador: ', (password) => {
                 
                 if (!cip || !fullName || !password) {
                     console.error("\n[ERROR] Todos los campos son obligatorios. Proceso cancelado.");
@@ -36,7 +37,6 @@ function crearUsuario() {
 
                 console.log("\nEncriptando contraseña...");
 
-                // Encriptamos la contraseña con bcrypt (10 rondas de salt)
                 bcrypt.hash(password, 10, (err, hash) => {
                     if (err) {
                         console.error("\n[ERROR] Error al encriptar la contraseña:", err);
@@ -60,7 +60,6 @@ function crearUsuario() {
                             console.log(`\n¡ÉXITO! Usuario administrador '${fullName}' (CIP: ${cip}) creado correctamente.`);
                         }
                         
-                        // Cerramos la conexión y la terminal
                         rl.close();
                         db.close((err) => {
                             if (err) console.error("Error al cerrar la base de datos:", err.message);
