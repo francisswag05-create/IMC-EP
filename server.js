@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: server.js (VERSIÓN FINAL Y COMPLETA CON RUTA DE EDICIÓN)
+// Archivo: server.js (VERSIÓN FINAL CON EDICIÓN SIN MODIFICAR FECHA)
 // =================================================================================================
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
@@ -78,17 +78,33 @@ app.post('/api/records', (req, res) => {
     });
 });
 
-// [PUT] /api/records/:id - ACTUALIZA UN REGISTRO EXISTENTE
+// [PUT] /api/records/:id - ACTUALIZA UN REGISTRO EXISTENTE (SIN MODIFICAR LA FECHA)
 app.put('/api/records/:id', (req, res) => {
     const { id } = req.params;
+    // Recibimos los datos actualizados, pero ignoramos cualquier campo de fecha que pueda venir
     const { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc } = req.body;
+
+    // [CORRECCIÓN] La consulta SQL ya NO incluye el campo 'fecha'
     const sql = `UPDATE records SET 
-                    sexo = ?, cip = ?, grado = ?, apellido = ?, nombre = ?, 
-                    edad = ?, peso = ?, altura = ?, imc = ?
+                    sexo = ?, 
+                    cip = ?, 
+                    grado = ?, 
+                    apellido = ?, 
+                    nombre = ?, 
+                    edad = ?, 
+                    peso = ?, 
+                    altura = ?, 
+                    imc = ?
                  WHERE id = ?`;
+
+    // [CORRECCIÓN] La lista de parámetros ya NO incluye 'fecha'
     db.run(sql, [sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, id], function(err) {
-        if (err) return res.status(500).json({ message: "Error al actualizar el registro.", error: err.message });
-        if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
+        if (err) {
+            return res.status(500).json({ message: "Error al actualizar el registro.", error: err.message });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ message: "Registro no encontrado." });
+        }
         res.json({ message: "Registro actualizado exitosamente." });
     });
 });
