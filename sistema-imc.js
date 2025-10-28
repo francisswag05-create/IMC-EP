@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CON RECUPERACIÓN DE CONTRASEÑA)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON VERIFICACIÓN DE ELEMENTOS)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
@@ -62,8 +62,8 @@ async function updateUI() {
         userInfo.classList.remove('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
         userInfo.classList.add('text-color-accent-lime', 'border-gray-600');
         
-        document.getElementById('admin-username').value = '';
-        document.getElementById('admin-password').value = '';
+        if (document.getElementById('admin-username')) document.getElementById('admin-username').value = '';
+        if (document.getElementById('admin-password')) document.getElementById('admin-password').value = '';
 
         if (monitoringTextEl) {
             monitoringTextEl.innerHTML = '¡Sistema en espera! Inicie sesión para activar el monitoreo.';
@@ -322,43 +322,205 @@ async function updateRecord(id, recordData) {
 
 // --- 6. Lógica de la Tabla de Registros ---
 
-function populateMonthFilter() { /* ... Tu código existente ... */ }
-function filterTable() { /* ... Tu código existente ... */ }
-function renderTable(records) { /* ... Tu código existente ... */ }
-function exportToWord() { /* ... Tu código existente ... */ }
+function populateMonthFilter() {
+    const filterSelect = document.getElementById('month-filter');
+    if (!filterSelect) return;
+    const monthCounts = allRecordsFromDB.reduce((acc, record) => {
+        if (!record.fecha) return acc;
+        const monthYear = record.fecha.substring(3); 
+        acc[monthYear] = (acc[monthYear] || 0) + 1;
+        return acc;
+    }, {});
+    filterSelect.innerHTML = '<option value="">Todos los Meses</option>';
+    Object.keys(monthCounts).sort((a, b) => {
+        const [mA, yA] = a.split('/').map(Number);
+        const [mB, yB] = b.split('/').map(Number);
+        if (yA !== yB) return yB - yA;
+        return mB - mA;
+    }).forEach(monthYear => {
+        const [month, year] = monthYear.split('/');
+        const monthName = new Date(year, month - 1, 1).toLocaleDateString('es-ES', { month: 'long' });
+        const option = document.createElement('option');
+        option.value = monthYear;
+        option.textContent = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${year} (${monthCounts[monthYear]} Registros)`;
+        filterSelect.appendChild(option);
+    });
+    filterSelect.querySelector('option[value=""]').textContent = `Todos los Meses (${allRecordsFromDB.length} Registros)`;
+}
+
+function filterTable() {
+    const nameFilter = document.getElementById('name-filter');
+    const ageFilter = document.getElementById('age-filter');
+    const monthFilter = document.getElementById('month-filter');
+    if (!nameFilter || !ageFilter || !monthFilter) return;
+
+    const nameSearch = nameFilter.value.toLowerCase().trim();
+    const ageValue = ageFilter.value;
+    const monthValue = monthFilter.value;
+    
+    currentFilteredRecords = allRecordsFromDB.filter(rec => {
+        const nameMatch = !nameSearch || `${rec.apellido} ${rec.nombre}`.toLowerCase().includes(nameSearch);
+        const ageMatch = !ageValue || rec.edad === parseInt(ageValue);
+        const monthMatch = !monthValue || (rec.fecha && rec.fecha.substring(3) === monthValue);
+        return nameMatch && ageMatch && monthMatch;
+    });
+    renderTable(currentFilteredRecords);
+}
+
+function renderTable(records) {
+    const tableBody = document.getElementById('admin-table-body');
+    if (!tableBody) return;
+    tableBody.innerHTML = '';
+    if (!isAuthenticated) return tableBody.innerHTML = `<tr><td colspan="10" class="text-center py-4">No está autenticado.</td></tr>`;
+    if (records.length === 0) return tableBody.innerHTML = `<tr><td colspan="10" class="text-center py-10">No hay registros que coincidan.</td></tr>`;
+    
+    records.forEach(data => {
+        const { resultado } = getAptitude(data.imc);
+        const badgeClass = getSimplifiedAptitudeStyle(resultado);
+        const rowBgClass = resultado.includes('INAPTO') ? 'bg-red-900/10' : '';
+        const row = tableBody.insertRow();
+        row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
+        
+        let actionButtons = '<span>N/A</span>';
+        if (currentUserRole === 'superadmin') {
+            actionButtons = `
+                <button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Editar"><i class="fas fa-pencil-alt"></i></button>
+                <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar"><i class="fas fa-trash-alt"></i></button>`;
+        }
+        
+        row.innerHTML = `
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${data.cip || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">${data.grado || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${(data.apellido || 'N/A').toUpperCase()}, ${data.nombre || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm">${data.peso || 'N/A'} kg / ${data.altura || 'N/A'} m</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-gold">${data.edad || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.includes('INAPTO') ? 'text-red-500' : 'text-color-accent-gold'}">${data.imc || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
+            <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.sexo || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-center">${actionButtons}</td>`;
+    });
+}
+
+function exportToWord() {
+    if (!isAuthenticated) return displayMessage('Acceso Denegado', 'Debe iniciar sesión.', 'error');
+    if (currentFilteredRecords.length === 0) return displayMessage('Sin Datos', 'No hay registros para exportar.', 'warning');
+    // ... Tu código de exportación (sin cambios)
+}
 
 // --- 7. Event Listeners ---
 
-document.getElementById('bmi-form').addEventListener('submit', function(e) { /* ... Tu código existente ... */ });
-document.getElementById('admin-record-form').addEventListener('submit', function(e) { /* ... Tu código existente ... */ });
-document.getElementById('admin-login-button').addEventListener('click', attemptAdminLogin);
-document.getElementById('logout-button').addEventListener('click', logoutAdmin);
-document.getElementById('export-word-button').addEventListener('click', exportToWord);
-document.getElementById('name-filter').addEventListener('input', filterTable);
-document.getElementById('age-filter').addEventListener('input', filterTable);
-document.getElementById('month-filter').addEventListener('change', filterTable);
-document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
-
-// [NUEVO] Listener para el enlace de "Olvidó su contraseña"
-document.getElementById('forgot-password-link').addEventListener('click', async (e) => {
-    e.preventDefault();
-    const cip = prompt("Por favor, ingrese su CIP para iniciar la recuperación de contraseña:");
-    if (!cip) return;
-    try {
-        displayMessage('Procesando...', 'Enviando solicitud de recuperación.', 'warning');
-        const response = await fetch('/api/forgot-password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cip: cip.trim() })
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message);
-        displayMessage('Verifique su Correo', data.message, 'success');
-    } catch (error) {
-        displayMessage('Error', error.message, 'error');
-    }
-});
-
 document.addEventListener('DOMContentLoaded', () => {
+    
     updateUI();
+
+    const bmiForm = document.getElementById('bmi-form');
+    if (bmiForm) {
+        bmiForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const weight = parseFloat(document.getElementById('input-weight').value);
+            const height = parseFloat(document.getElementById('input-height').value);
+            if (weight > 0 && height > 0) {
+                const imc = calculateIMC(weight, height);
+                const { resultado, detalle } = getAptitude(imc);
+                const badgeClass = resultado.includes('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
+                document.getElementById('bmi-value').textContent = imc;
+                const aptitudeBadge = document.getElementById('aptitude-badge');
+                aptitudeBadge.textContent = resultado;
+                aptitudeBadge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
+                document.getElementById('aptitude-detail').textContent = detalle;
+                document.getElementById('result-box').classList.remove('hidden');
+            } else {
+                displayMessage('Datos Inválidos', 'Ingrese un peso y altura válidos.', 'error');
+            }
+        });
+    }
+
+    const adminRecordForm = document.getElementById('admin-record-form');
+    if (adminRecordForm) {
+        adminRecordForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!isAuthenticated) return displayMessage('Acceso Denegado', 'Debe iniciar sesión.', 'error');
+
+            const form = e.target;
+            const sexo = form.elements['input-sex-admin'].value;
+            const cip = form.elements['input-userid'].value;
+            const grado = form.elements['input-role'].value;
+            const apellido = form.elements['input-lastname'].value;
+            const nombre = form.elements['input-firstname'].value;
+            const edad = parseInt(form.elements['input-age-admin'].value);
+            const peso = parseFloat(form.elements['input-weight-admin'].value);
+            const altura = parseFloat(form.elements['input-height-admin'].value);
+
+            if (peso > 0 && altura > 0 && cip && grado && apellido && nombre && edad > 0) {
+                const imc = calculateIMC(peso, altura);
+                const { resultado, detalle } = getAptitude(imc);
+                const badgeClass = getSimplifiedAptitudeStyle(resultado);
+                document.getElementById('admin-bmi-value').textContent = imc;
+                document.getElementById('admin-aptitude-badge').textContent = resultado;
+                document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
+                document.getElementById('admin-aptitude-detail').textContent = detalle;
+                document.getElementById('admin-result-box').classList.remove('hidden');
+
+                if (isEditMode) {
+                    const updatedRecord = { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc };
+                    updateRecord(currentEditingRecordId, updatedRecord);
+                } else {
+                    const now = new Date();
+                    const day = String(now.getDate()).padStart(2, '0');
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const year = now.getFullYear();
+                    const formattedDate = `${day}/${month}/${year}`;
+                    const newRecord = { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: currentAdminUser };
+                    saveRecord(newRecord);
+                }
+            } else {
+                displayMessage('Error de Entrada', 'Por favor, complete todos los campos.', 'error');
+                document.getElementById('admin-result-box').classList.add('hidden');
+            }
+        });
+    }
+
+    const adminLoginButton = document.getElementById('admin-login-button');
+    if (adminLoginButton) adminLoginButton.addEventListener('click', attemptAdminLogin);
+    
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) logoutButton.addEventListener('click', logoutAdmin);
+
+    const exportButton = document.getElementById('export-word-button');
+    if (exportButton) exportButton.addEventListener('click', exportToWord);
+
+    const nameFilter = document.getElementById('name-filter');
+    if (nameFilter) nameFilter.addEventListener('input', filterTable);
+    
+    const ageFilter = document.getElementById('age-filter');
+    if (ageFilter) ageFilter.addEventListener('input', filterTable);
+
+    const monthFilter = document.getElementById('month-filter');
+    if (monthFilter) monthFilter.addEventListener('change', filterTable);
+
+    const addUserForm = document.getElementById('add-user-form');
+    if (addUserForm) addUserForm.addEventListener('submit', handleAddUser);
+
+    const forgotPasswordLink = document.getElementById('forgot-password-link');
+    if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const cip = prompt("Ingrese su CIP para iniciar la recuperación de contraseña:");
+            if (!cip) return;
+            try {
+                displayMessage('Procesando...', 'Enviando solicitud...', 'warning');
+                const response = await fetch('/api/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cip: cip.trim() })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message);
+                displayMessage('Verifique su Correo', data.message, 'success');
+            } catch (error) {
+                displayMessage('Error', error.message, 'error');
+            }
+        });
+    }
 });
