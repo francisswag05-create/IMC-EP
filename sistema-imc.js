@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - CORREGIDO)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
@@ -34,6 +34,87 @@ function displayMessage(title, text, type) {
         box.classList.add('hidden');
     }, 5000);
 }
+
+
+// --- FUNCIONES PARA GESTIÓN DE USUARIOS (MOVIDAS ARRIBA para resolver el ReferenceError) ---
+
+async function fetchAndDisplayUsers() {
+    const tableBody = document.getElementById('users-table-body');
+    try {
+        const response = await fetch('/api/users');
+        if (!response.ok) throw new Error('No se pudieron cargar los usuarios.');
+        
+        const users = await response.json();
+        tableBody.innerHTML = ''; 
+
+        if (users.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-6">No hay administradores registrados.</td></tr>';
+            return;
+        }
+
+        users.forEach(user => {
+            const row = tableBody.insertRow();
+            row.innerHTML = `
+                <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${user.cip}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm">${user.fullName}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-center">
+                    <button onclick="handleDeleteUser('${user.cip}')" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Usuario">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            `;
+        });
+
+    } catch (error) {
+        tableBody.innerHTML = `<tr><td colspan="3" class="text-center py-6">Error al cargar usuarios.</td></tr>`;
+        console.error(error);
+    }
+}
+
+async function handleAddUser(event) {
+    event.preventDefault();
+    const cip = document.getElementById('input-new-cip').value;
+    const fullName = document.getElementById('input-new-fullname').value;
+    const password = document.getElementById('input-new-password').value;
+
+    try {
+        const response = await fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cip, fullName, password })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Error al crear el usuario.');
+
+        displayMessage('ÉXITO', `Usuario ${cip} creado correctamente.`, 'success');
+        document.getElementById('add-user-form').reset();
+        await fetchAndDisplayUsers();
+
+    } catch (error) {
+        displayMessage('ERROR', error.message, 'error');
+    }
+}
+
+async function handleDeleteUser(cip) {
+    if (cip === currentAdminUser) {
+        displayMessage('ACCIÓN DENEGADA', 'No puedes eliminar tu propio usuario mientras estás en sesión.', 'warning');
+        return;
+    }
+    if (!confirm(`¿Estás seguro de que quieres eliminar al administrador con CIP ${cip}? Esta acción es irreversible.`)) return;
+
+    try {
+        const response = await fetch(`/api/users/${cip}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Error al eliminar el usuario.');
+        
+        displayMessage('USUARIO ELIMINADO', `El usuario con CIP ${cip} ha sido eliminado.`, 'warning');
+        await fetchAndDisplayUsers();
+
+    } catch (error) {
+        displayMessage('ERROR', error.message, 'error');
+    }
+}
+
 
 async function updateUI() {
     const publicView = document.getElementById('public-access-view');
@@ -93,7 +174,7 @@ async function updateUI() {
 function updateAdminTableHeaders() {
     const tableHeaderRow = document.querySelector('#admin-dashboard-view thead tr');
     if (tableHeaderRow) {
-        // AÑADIR NUEVAS COLUMNAS (P.A. y PBA)
+        // ACTUALIZADO CON NUEVAS COLUMNAS (P.A. y PBA)
         tableHeaderRow.innerHTML = `
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">CIP</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">GRADO</th>
@@ -204,7 +285,7 @@ function getAptitude(imc, sexo, pab, paString) {
 }
 
 // --- 4. Funciones de Autenticación y Administración ---
-// ... (Estas funciones se mantienen igual)
+
 async function attemptAdminLogin() {
     const username = document.getElementById('admin-username').value;
     const password = document.getElementById('admin-password').value;
@@ -282,8 +363,9 @@ async function handleForgotPassword() {
     }
 }
 
+
 // --- 5. Funciones CRUD para Registros de IMC ---
-// ... (fetchAndDisplayRecords, deleteRecord se mantienen igual)
+
 async function fetchAndDisplayRecords() {
     try {
         const response = await fetch('/api/records');
@@ -295,6 +377,7 @@ async function fetchAndDisplayRecords() {
         console.error("Error fetching records:", error);
         displayMessage('Error de Conexión', 'No se pudieron cargar los registros. Asegúrese de que el servidor esté funcionando.', 'error');
         const tableBody = document.getElementById('admin-table-body');
+        // COLSPAN_VALUE AUMENTADO A 11
         tableBody.innerHTML = `<tr><td colspan="11" class="text-center py-10">Error al cargar datos. Verifique la consola.</td></tr>`;
     }
 }
@@ -336,7 +419,6 @@ async function deleteRecord(id) {
     }
 }
 
-
 // --- FUNCIONES DE EDICIÓN DE REGISTROS (ACTUALIZADAS) ---
 
 function handleEditRecord(id) {
@@ -346,14 +428,14 @@ function handleEditRecord(id) {
         return;
     }
     
-    // CAMPOS NUEVOS
+    // CARGAR NUEVOS CAMPOS
     document.getElementById('input-gguu').value = recordToEdit.gguu || '';
     document.getElementById('input-unidad').value = recordToEdit.unidad || '';
     document.getElementById('input-dni').value = recordToEdit.dni || '';
     document.getElementById('input-pa').value = recordToEdit.pa || '';
     document.getElementById('input-pab').value = recordToEdit.pab || '';
 
-    // CAMPOS EXISTENTES
+    // CARGAR CAMPOS EXISTENTES
     document.getElementById('input-sex-admin').value = recordToEdit.sexo;
     document.getElementById('input-userid').value = recordToEdit.cip;
     document.getElementById('input-role').value = recordToEdit.grado;
@@ -362,6 +444,18 @@ function handleEditRecord(id) {
     document.getElementById('input-firstname').value = recordToEdit.nombre;
     document.getElementById('input-weight-admin').value = recordToEdit.peso;
     document.getElementById('input-height-admin').value = recordToEdit.altura;
+
+    // FORZAR RECALCULO Y VISUALIZACIÓN al abrir el formulario (SOLUCIÓN UX)
+    const imc = calculateIMC(recordToEdit.peso, recordToEdit.altura);
+    const { resultado, detalle } = getAptitude(imc, recordToEdit.sexo, recordToEdit.pab, recordToEdit.pa);
+    const badgeClass = getSimplifiedAptitudeStyle(resultado);
+
+    document.getElementById('admin-bmi-value').textContent = imc;
+    document.getElementById('admin-aptitude-badge').textContent = resultado;
+    document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
+    document.getElementById('admin-aptitude-detail').textContent = detalle;
+    document.getElementById('admin-result-box').classList.remove('hidden');
+
 
     const submitButton = document.querySelector('#admin-record-form button[type="submit"]');
     submitButton.innerHTML = '<i class="fas fa-save mr-2"></i> ACTUALIZAR REGISTRO';
@@ -409,7 +503,7 @@ async function updateRecord(id, recordData) {
 
 
 // --- 6. Lógica de la Tabla de Registros (Filtros, Renderizado, Exportación) ---
-// ... (populateMonthFilter, filterTable se mantienen igual)
+
 function populateMonthFilter() {
     const filterSelect = document.getElementById('month-filter');
     const monthCounts = allRecordsFromDB.reduce((acc, record) => {
@@ -483,7 +577,7 @@ function renderTable(records) {
         row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
         
         const riesgoAbdominalClass = riesgoAEnf === 'RIESGO MUY ALTO' ? 'text-red-500 font-bold' : (riesgoAEnf === 'RIESGO ALTO' ? 'text-color-accent-gold' : 'text-color-primary-green');
-        const perimetroAbdominalDisplay = data.pab ? `${data.pab} cm (${riesgoAEnf})` : 'N/A';
+        const paClasificacionClass = paClasificacion === 'HIPERTENSION' ? 'text-red-500 font-bold' : (paClasificacion === 'PRE-HIPERTENSION' ? 'text-yellow-500' : 'text-color-primary-green');
         
         let actionButtons = '<span>N/A</span>';
         if (currentUserRole === 'superadmin') {
@@ -501,7 +595,7 @@ function renderTable(records) {
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${data.cip || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">${data.grado || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${(data.apellido || 'N/A').toUpperCase()}, ${data.nombre || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">${data.pa || 'N/A'} (${paClasificacion})</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm ${paClasificacionClass}">${data.pa || 'N/A'} (${paClasificacion})</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm ${riesgoAbdominalClass}">${data.pab || 'N/A'} cm (${riesgoAEnf})</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${data.peso || 'N/A'} kg / ${data.altura || 'N/A'} m</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-gold">${data.edad || 'N/A'}</td>
@@ -530,16 +624,29 @@ function exportToWord() {
     const subtitleStyle = "text-align: center; font-size: 12px; margin-bottom: 20px; font-family: 'Arial', sans-serif;";
     const reportDate = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
     
-    // ENCABEZADOS DE WORD (SIN NUEVOS CAMPOS)
-    let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP</title><style>body { font-family: Arial, sans-serif; } table { border-collapse: collapse; width: 70%; margin: 20px auto; } td, th { border-collapse: collapse; }</style></head><body><div style="text-align: center; width: 100%;"><h1 style="${titleStyle}">REPORTE DE ÍNDICE DE MASA CORPORAL (SIMCEP)</h1><p style="${subtitleStyle}">Fecha: ${reportDate} | Registros Filtrados: ${currentFilteredRecords.length}</p></div><table border="1"><thead><tr><th style="${tableHeaderStyle}; width: 10%;">GRADO</th><th style="${tableHeaderStyle}; width: 35%;">APELLIDO, NOMBRE</th><th style="${tableHeaderStyle}; width: 10%;">EDAD</th><th style="${tableHeaderStyle}; width: 15%;">IMC</th><th style="${tableHeaderStyle}; width: 20%;">RESULTADO</th><th style="${tableHeaderStyle}; width: 10%;">FECHA</th></tr></thead><tbody>`;
+    // ENCABEZADOS DE WORD (Actualizado para mostrar más datos clínicos)
+    let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP</title><style>body { font-family: Arial, sans-serif; } table { border-collapse: collapse; width: 95%; margin: 20px auto; } td, th { border-collapse: collapse; }</style></head><body><div style="text-align: center; width: 100%;"><h1 style="${titleStyle}">REPORTE DE ÍNDICE DE MASA CORPORAL (SIMCEP)</h1><p style="${subtitleStyle}">Fecha: ${reportDate} | Registros Filtrados: ${currentFilteredRecords.length}</p></div><table border="1"><thead><tr><th style="${tableHeaderStyle}; width: 10%;">GRADO</th><th style="${tableHeaderStyle}; width: 25%;">APELLIDO, NOMBRE</th><th style="${tableHeaderStyle}; width: 10%;">PBA (cm)</th><th style="${tableHeaderStyle}; width: 10%;">RIESGO ABD.</th><th style="${tableHeaderStyle}; width: 10%;">PA</th><th style="${tableHeaderStyle}; width: 10%;">IMC</th><th style="${tableHeaderStyle}; width: 15%;">RESULTADO</th><th style="${tableHeaderStyle}; width: 10%;">FECHA</th></tr></thead><tbody>`;
     
     currentFilteredRecords.forEach(record => {
-        const { resultado } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
+        const { resultado, riesgoAEnf, paClasificacion } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
         const textStyleTag = resultado.includes('INAPTO') ? inaptoTextStyle : aptoTextStyle;
         const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
-        htmlContent += `<tr><td style="${cellStyle}">${record.grado || 'N/A'}</td><td style="${nameCellStyle}">${(record.apellido || 'N/A').toUpperCase()}, ${record.nombre || 'N/A'}</td><td style="${cellStyle}">${record.edad || 'N/A'}</td><td style="${cellStyle} font-weight: bold;">${record.imc || 'N/A'}</td><td style="${cellStyle}" ${textStyleTag}>${resultado}</td><td style="${cellStyle}">${record.fecha || 'N/A'}</td></tr>`;
+        const riesgoAbdominalColor = riesgoAEnf.includes('MUY ALTO') ? 'style="color: #991b1b; font-weight: bold;"' : '';
+        
+        htmlContent += `<tr>
+            <td style="${cellStyle}">${record.grado || 'N/A'}</td>
+            <td style="${nameCellStyle}">${(record.apellido || 'N/A').toUpperCase()}, ${record.nombre || 'N/A'}</td>
+            <td style="${cellStyle}">${record.pab || 'N/A'}</td>
+            <td style="${cellStyle}" ${riesgoAbdominalColor}>${riesgoAEnf || 'N/A'}</td>
+            <td style="${cellStyle}">${record.pa || 'N/A'} (${paClasificacion || 'N/A'})</td>
+            <td style="${cellStyle} font-weight: bold;">${record.imc || 'N/A'}</td>
+            <td style="${cellStyle}" ${textStyleTag}>${resultado}</td>
+            <td style="${cellStyle}">${record.fecha || 'N/A'}</td>
+        </tr>`;
     });
-    htmlContent += `</tbody></table><div style="margin: 40px auto 0 auto; width: 70%; text-align: center; border: none; font-family: 'Arial', sans-serif;"><h4 style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #1e3a8a;">LEYES DE CLASIFICACIÓN DE IMC (MINSA - PERÚ)</h4><p style="font-size: 10px; margin: 5px 0; text-align: left; padding-left: 10%;">**Clasificación y Rango (IMC kg/m²):**<br>- Bajo peso: &lt; 18.5 (APTO - Bajo)<br>- Peso normal: 18.5 - 24.9 (APTO)<br>- Sobrepeso: 25.0 - 29.9 (APTO - *Requiere monitoreo*)<br>- Obesidad I, II, III: &ge; 30.0 (INAPTO)</p><p style="font-size: 10px; margin-top: 15px; color: #555; text-align: left; padding-left: 10%;">*La aptitud operacional INAPTO en SIMCEP es determinada por un IMC &ge; 30.0, alineado a directivas sanitarias de las Fuerzas Armadas.</p></div></body></html>`;
+    
+    htmlContent += `</tbody></table><div style="margin: 40px auto 0 auto; width: 95%; text-align: center; border: none; font-family: 'Arial', sans-serif;"><h4 style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #1e3a8a;">LEYES DE CLASIFICACIÓN CLÍNICA (SIMCEP)</h4><p style="font-size: 10px; margin: 5px 0; text-align: left; padding-left: 10%;">*La aptitud INAPTO se define por un IMC ≥ 30.0 o un riesgo de enfermedad abdominal MUY ALTO (OMS).</p></div></body></html>`;
+
     const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
     const filename = `Reporte_SIMCEP_IMC_Word_${date}.doc`;
     const blob = new Blob([htmlContent], { type: 'application/msword' });
@@ -568,7 +675,7 @@ function exportToExcel() {
         "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION", 
         "PBA", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", 
         "MOTIVO", "DIGITADOR"
-    ].join('\t');
+    ].join('\t'); // Separador de tabulación
 
     let dataRows = [];
     
@@ -577,8 +684,8 @@ function exportToExcel() {
         const { clasificacionMINSA, paClasificacion, riesgoAEnf } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
         
         // Determinar el nombre del Digitador según el rol
-        const digitadorRole = record.registradoPor && (record.registradoPor.includes('MD') || record.registradoPor.includes('DR')) ? 'MD, DR' : 'ADMIN';
-        const digitadorDisplay = record.registradoPor ? `${record.registradoPor.split('(')[0].trim()} (${digitadorRole})` : currentAdminFullName;
+        const adminRoleText = record.registradoPor && (record.registradoPor.includes('MD') || record.registradoPor.includes('DR')) ? 'MD, DR' : 'ADMIN';
+        const digitadorDisplay = record.registradoPor ? `${record.registradoPor.split('(')[0].trim()} (${adminRoleText})` : `${currentAdminFullName} (${adminRoleText})`;
         
         // 2. Construir la fila de datos (separada por tabulador \t)
         const row = [
@@ -594,9 +701,9 @@ function exportToExcel() {
             record.peso || 'N/A', // PESO
             record.altura || 'N/A', // TALLA (Altura)
             record.pa || 'N/A', // PA
-            paClasificacion || 'N/A', // CLASIFICACION (de PA)
+            paClasificacion || record.paClasificacion || 'N/A', // CLASIFICACION (de PA)
             record.pab || 'N/A', // PBA
-            riesgoAEnf || 'N/A', // RIESGO A ENF SEGUN PABD
+            riesgoAEnf || record.riesgoAEnf || 'N/A', // RIESGO A ENF SEGUN PABD
             record.imc || 'N/A', // IMC
             clasificacionMINSA || 'N/A', // CLASIFICACION DE IMC (Clasificación MINSA)
             '###', // MOTIVO (Dejamos ### como marcador si no hay dato)
@@ -611,7 +718,7 @@ function exportToExcel() {
     // Crear el Blob para la descarga (usando .xls para forzar la apertura en Excel)
     const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
     const filename = `Reporte_SIMCEP_Mensual_${date}.xls`; 
-    // Usamos BOM (\uFEFF) y application/vnd.ms-excel para compatibilidad con caracteres especiales y Excel
+    // Usamos BOM (\uFEFF) y application/vnd.ms-excel para compatibilidad
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'application/vnd.ms-excel;charset=utf-8' }); 
     const url = URL.createObjectURL(blob);
     
@@ -638,7 +745,8 @@ document.getElementById('bmi-form').addEventListener('submit', function(e) {
     if (weight > 0 && height > 0) {
         // En el formulario público, no pedimos PBA ni PA, así que la lógica es simplificada (solo IMC)
         const imc = calculateIMC(weight, height);
-        const { resultado, detalle } = getAptitude(imc, 'Masculino', 0, 'N/A'); // Llamada simplificada
+        // Usamos valores de PA y PBA que no activan el riesgo (Masculino, 0cm, N/A)
+        const { resultado, detalle } = getAptitude(imc, 'Masculino', 0, 'N/A'); 
         
         const badgeClass = resultado.includes('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
         document.getElementById('bmi-value').textContent = imc;
@@ -716,7 +824,7 @@ document.getElementById('admin-record-form').addEventListener('submit', function
 document.getElementById('admin-login-button').addEventListener('click', attemptAdminLogin);
 document.getElementById('logout-button').addEventListener('click', logoutAdmin);
 document.getElementById('export-word-button').addEventListener('click', exportToWord);
-// NUEVO BOTÓN
+// CONEXIÓN DEL BOTÓN EXCEL
 document.getElementById('export-excel-button').addEventListener('click', exportToExcel); 
 document.getElementById('forgot-password-link').addEventListener('click', function(e) {
     e.preventDefault(); 
@@ -726,52 +834,6 @@ document.getElementById('name-filter').addEventListener('input', filterTable);
 document.getElementById('age-filter').addEventListener('input', filterTable);
 document.getElementById('month-filter').addEventListener('change', filterTable);
 document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
-
-
-// ... (El resto de funciones de gestión de usuarios se mantienen igual)
-async function handleAddUser(event) {
-    event.preventDefault();
-    const cip = document.getElementById('input-new-cip').value;
-    const fullName = document.getElementById('input-new-fullname').value;
-    const password = document.getElementById('input-new-password').value;
-
-    try {
-        const response = await fetch('/api/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cip, fullName, password })
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Error al crear el usuario.');
-
-        displayMessage('ÉXITO', `Usuario ${cip} creado correctamente.`, 'success');
-        document.getElementById('add-user-form').reset();
-        await fetchAndDisplayUsers();
-
-    } catch (error) {
-        displayMessage('ERROR', error.message, 'error');
-    }
-}
-async function handleDeleteUser(cip) {
-    if (cip === currentAdminUser) {
-        displayMessage('ACCIÓN DENEGADA', 'No puedes eliminar tu propio usuario mientras estás en sesión.', 'warning');
-        return;
-    }
-    if (!confirm(`¿Estás seguro de que quieres eliminar al administrador con CIP ${cip}? Esta acción es irreversible.`)) return;
-
-    try {
-        const response = await fetch(`/api/users/${cip}`, { method: 'DELETE' });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Error al eliminar el usuario.');
-        
-        displayMessage('USUARIO ELIMINADO', `El usuario con CIP ${cip} ha sido eliminado.`, 'warning');
-        await fetchAndDisplayUsers();
-
-    } catch (error) {
-        displayMessage('ERROR', error.message, 'error');
-    }
-}
-
 
 document.addEventListener('DOMContentLoaded', () => {
     updateUI();
