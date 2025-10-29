@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: server.js (VERSIÓN FINAL Y COMPLETA CON RECUPERACIÓN DE CONTRASEÑA)
+// Archivo: server.js (VERSIÓN FINAL Y COMPLETA CON NUEVOS CAMPOS CLÍNICOS)
 // =================================================================================================
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
@@ -38,8 +38,11 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 resetPasswordExpires INTEGER
             );
             CREATE TABLE IF NOT EXISTS records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, sexo TEXT, cip TEXT, grado TEXT, apellido TEXT,
-                nombre TEXT, edad INTEGER, peso REAL, altura REAL, imc REAL, fecha TEXT,
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                gguu TEXT, unidad TEXT, dni TEXT, pa TEXT, pab REAL, paClasificacion TEXT, riesgoAEnf TEXT, 
+                sexo TEXT, cip TEXT, grado TEXT, apellido TEXT,
+                nombre TEXT, edad INTEGER, peso REAL, altura REAL, 
+                imc REAL, fecha TEXT,
                 registradoPor TEXT, UNIQUE(cip, fecha)
             );
         `, (err) => {
@@ -62,9 +65,13 @@ app.get('/api/records', (req, res) => {
 
 // [POST] /api/records
 app.post('/api/records', (req, res) => {
-    const { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor } = req.body;
-    const sql = `INSERT INTO records (sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    db.run(sql, [sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor], function(err) {
+    // CAPTURA DE TODOS LOS CAMPOS
+    const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor } = req.body;
+    
+    // SQL con todos los 18 campos para inserción
+    const sql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    
+    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor], function(err) {
         if (err) {
             if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ message: `El CIP ${cip} ya tiene un registro en la fecha ${fecha}.` });
             return res.status(500).json({ error: err.message });
@@ -76,12 +83,17 @@ app.post('/api/records', (req, res) => {
 // [PUT] /api/records/:id
 app.put('/api/records/:id', (req, res) => {
     const { id } = req.params;
-    const { sexo, cip, grado, apellido, nombre, edad, peso, altura, imc } = req.body;
+    // CAPTURA DE TODOS LOS CAMPOS
+    const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc } = req.body;
+    
+    // SQL con todos los 15 campos para actualización
     const sql = `UPDATE records SET 
+                    gguu = ?, unidad = ?, dni = ?, pa = ?, pab = ?, paClasificacion = ?, riesgoAEnf = ?,
                     sexo = ?, cip = ?, grado = ?, apellido = ?, nombre = ?, 
                     edad = ?, peso = ?, altura = ?, imc = ?
                  WHERE id = ?`;
-    db.run(sql, [sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, id], function(err) {
+                 
+    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, id], function(err) {
         if (err) return res.status(500).json({ message: "Error al actualizar.", error: err.message });
         if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
         res.json({ message: "Registro actualizado." });
