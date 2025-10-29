@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - LLAMADA AL SERVIDOR)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN, EXCEL Y GESTIÓN DE USUARIOS COMPLETA)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
@@ -36,7 +36,7 @@ function displayMessage(title, text, type) {
 }
 
 
-// --- FUNCIONES PARA GESTIÓN DE USUARIOS ---
+// --- FUNCIONES PARA GESTIÓN DE USUARIOS (MEJORADAS) ---
 
 async function fetchAndDisplayUsers() {
     const tableBody = document.getElementById('users-table-body');
@@ -54,10 +54,19 @@ async function fetchAndDisplayUsers() {
 
         users.forEach(user => {
             const row = tableBody.insertRow();
+            // Lógica para mostrar rol en paréntesis
+            const userRoleText = user.role === 'superadmin' ? 'SUPERADMIN' : 'ADMINISTRADOR'; 
+            const userFullNameDisplay = `${user.fullName} (${userRoleText})`;
+
             row.innerHTML = `
                 <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${user.cip}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm">${user.fullName}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm">${userFullNameDisplay}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-center">
+                    <!-- BOTÓN DE EDICIÓN/CAMBIO DE CLAVE -->
+                    <button onclick="handleEditUser('${user.cip}')" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Cambiar Contraseña">
+                        <i class="fas fa-pencil-alt"></i>
+                    </button>
+                    <!-- BOTÓN DE ELIMINAR -->
                     <button onclick="handleDeleteUser('${user.cip}')" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Usuario">
                         <i class="fas fa-trash-alt"></i>
                     </button>
@@ -75,13 +84,15 @@ async function handleAddUser(event) {
     event.preventDefault();
     const cip = document.getElementById('input-new-cip').value;
     const fullName = document.getElementById('input-new-fullname').value;
+    const email = document.getElementById('input-new-email').value; // <-- CAPTURA DE EMAIL
     const password = document.getElementById('input-new-password').value;
 
     try {
         const response = await fetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cip, fullName, password })
+            // ENVIAR EMAIL
+            body: JSON.stringify({ cip, fullName, email, password })
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Error al crear el usuario.');
@@ -112,6 +123,39 @@ async function handleDeleteUser(cip) {
 
     } catch (error) {
         displayMessage('ERROR', error.message, 'error');
+    }
+}
+
+function handleEditUser(cip) {
+    const newPassword = prompt(`Ingrese la NUEVA CONTRASEÑA para el usuario ${cip}.`);
+    
+    if (newPassword === null || newPassword.trim() === "") {
+        displayMessage('CANCELADO', 'Cambio de contraseña cancelado.', 'warning');
+        return;
+    }
+    
+    if (!confirm(`¿Confirma que desea cambiar la contraseña para el usuario ${cip}?`)) return;
+
+    updateUserPassword(cip, newPassword);
+}
+
+async function updateUserPassword(cip, newPassword) {
+    try {
+        // Llama a la nueva ruta en el servidor
+        const response = await fetch(`/api/users/password/${cip}`, { 
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newPassword: newPassword }) 
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Error al cambiar la contraseña.');
+
+        displayMessage('ÉXITO', `La contraseña para el usuario ${cip} ha sido actualizada.`, 'success');
+        
+    } catch (error) {
+        console.error('Error al actualizar contraseña:', error);
+        displayMessage('ERROR', `Fallo al actualizar clave: ${error.message}.`, 'error');
     }
 }
 
