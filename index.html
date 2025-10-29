@@ -13,19 +13,39 @@
     <link rel="icon" type="image/jpeg" href="./imagenes/simcep.jpg"> 
     
     <style>
+        /* Estilos base del Header y Logo */
         .header-content-v2 { display: flex; align-items: center; }
-        .header-logo-image { width: 35px; height: auto; margin-right: 0.75rem; } 
+        .header-logo-image { 
+            width: 35px;
+            height: auto; 
+            margin-right: 0.75rem; 
+        } 
         .header-text-v2 { display: flex; flex-direction: column; }
-        .header-simcep-v2 { font-size: 1.75rem; font-weight: 900; letter-spacing: 0.05em; line-height: 1.1; color: var(--color-accent-gold); margin: 0; padding: 0; } 
-        .header-subtitle-v2 { font-size: 0.6rem; font-weight: 500; color: var(--color-text-muted); margin-top: 0.1rem; line-height: 1; } 
+        .header-simcep-v2 { 
+            font-size: 1.75rem;
+            font-weight: 900; 
+            letter-spacing: 0.05em; 
+            line-height: 1.1; 
+            color: var(--color-accent-gold); 
+            margin: 0; 
+            padding: 0; 
+        } 
+        .header-subtitle-v2 { 
+            font-size: 0.6rem;
+            font-weight: 500; 
+            color: var(--color-text-muted); 
+            margin-top: 0.1rem; 
+            line-height: 1; 
+        } 
     </style>
 </head>
 <body class="font-sans antialiased flex flex-col min-h-screen">
 
     <header class="text-white p-2 shadow-xl sticky top-0 z-20 header-bar">
         <div class="container mx-auto flex justify-between items-center">
+            
             <div class="header-content-v2">
-                <img src="./imagenes/simcep.jpg" alt="Logo SIMCEP" class="header-logo-image">
+                <img src="./imagenes/simcep.jpg" alt="Logo SIMCEP - Ejército del Perú" class="header-logo-image">
                 <div class="header-text-v2">
                     <h1 class="header-simcep-v2">SIMCEP</h1>
                     <span class="header-subtitle-v2">Sistema de Índice de Masa Corporal del Ejército del Perú</span>
@@ -46,7 +66,9 @@
         
         <section id="public-access-view" class="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-10">
             <div class="lg:col-span-1 card-tech">
-                <h2 class="text-2xl font-bold mb-6 flex items-center pb-3"><i class="fas fa-shield-alt text-xl mr-3 text-color-accent-lime"></i> ACCESO ADMINISTRADOR</h2>
+                <h2 class="text-2xl font-bold mb-6 flex items-center pb-3">
+                    <i class="fas fa-shield-alt text-xl mr-3 text-color-accent-lime"></i> ACCESO ADMINISTRADOR
+                </h2>
                 <div id="admin-login-form" class="space-y-6">
                     <div>
                         <label for="admin-username" class="label-tech">ID de Usuario Administrador (CIP)</label>
@@ -56,38 +78,58 @@
                         <label for="admin-password" class="label-tech">Clave Secreta</label>
                         <input type="password" id="admin-password" placeholder="•••••••••" class="input-tech" required>
                     </div>
-                    <button id="admin-login-button" class="btn-primary-tech btn-login w-full mt-6"><i class="fas fa-sign-in-alt mr-2"></i> ACCEDER</button>
+                    <button id="admin-login-button" class="btn-primary-tech btn-login w-full mt-6">
+                        <i class="fas fa-sign-in-alt mr-2"></i> ACCEDER
+                    </button>
+                    
+                    <!-- INICIO DEL CÓDIGO AÑADIDO: ENLACE DE RECUPERACIÓN -->
                     <p class="text-center text-xs pt-2">
-                        <a href="#" id="forgot-password-link" class="text-color-text-muted hover:text-white transition-colors duration-300">¿Olvidó su contraseña?</a>
+                        <a href="#" id="forgot-password-link" class="text-color-text-muted hover:text-white transition-colors duration-300">
+                            ¿Olvidó su contraseña?
+                        </a>
                     </p>
+                    <!-- FIN DEL CÓDIGO AÑADIDO: ENLACE DE RECUPERACIÓN -->
+                    
                 </div>
             </div>
 
             <div id="bmi-form-card" class="lg:col-span-2 card-tech">
-                <h2 class="text-2xl font-bold mb-6 flex items-center pb-3"><i class="fas fa-ruler-vertical text-xl mr-3 text-color-primary-green"></i> CALCULADORA DE ÍNDICE DE MASA CORPORAL</h2>
+                <h2 class="text-2xl font-bold mb-6 flex items-center pb-3">
+                    <i class="fas fa-ruler-vertical text-xl mr-3 text-color-primary-green"></i> CALCULADORA DE ÍNDICE DE MASA CORPORAL
+                </h2>
+
                 <form id="bmi-form" class="space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
                             <label for="input-sex" class="label-tech">Sexo</label>
-                            <select id="input-sex" required class="input-tech"><option value="Masculino">Masculino</option><option value="Femenino">Femenino</option></select>
+                            <select id="input-sex" required class="input-tech">
+                                <option value="Masculino">Masculino</option>
+                                <option value="Femenino">Femenino</option>
+                            </select>
                         </div>
+                        
                         <div>
                             <label for="input-weight" class="label-tech">Peso (kg)</label>
                             <input type="number" id="input-weight" value="75.5" placeholder="Ej: 75.5" min="20" step="0.1" required class="input-tech">
                         </div>
+
                         <div>
                             <label for="input-height" class="label-tech">Altura (metros)</label>
                             <input type="number" id="input-height" value="1.75" placeholder="Ej: 1.75" min="0.5" step="0.01" required class="input-tech">
                         </div>
                     </div>
-                    <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6"><i class="fas fa-chart-line mr-2"></i> CALCULAR IMC</button>
+
+                    <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6">
+                        <i class="fas fa-chart-line mr-2"></i> CALCULAR IMC
+                    </button>
                 </form>
+
                 <div id="result-box" class="mt-8 p-6 rounded-lg hidden border-l-4 border-color-accent-lime bg-color-green-darker">
                     <h3 class="text-lg font-bold mb-4 text-color-accent-gold border-b border-color-border pb-2 flex items-center"><i class="fas fa-poll mr-2"></i> Resultado Final de IMC</h3>
                     <div class="flex flex-col sm:flex-row justify-between items-center text-center sm:text-left">
                         <div>
                             <p class="text-sm text-color-text-muted">Índice de Masa Corporal:</p>
-                            <p class="text-7xl font-extrabold" id="bmi-value" style="color:var(--color-accent-lime);">--</p>
+                            <p class="text-7xl font-extrabold leading-none tracking-tighter" id="bmi-value" style="color:var(--color-accent-lime);">--</p>
                         </div>
                         <div class="mt-4 sm:mt-0 text-right">
                             <p class="text-sm text-color-text-muted mb-1">Diagnóstico de Aptitud:</p>
@@ -99,65 +141,183 @@
             </div>
         </section>
 
+        
         <section id="admin-dashboard-view" class="hidden-view mt-10 text-white"> 
-            <h2 class="text-3xl font-bold mb-8 admin-header-title pb-3 tracking-wider flex items-center"><i class="fas fa-tachometer-alt text-2xl mr-3"></i> CENTRO DE OPERACIONES Y GESTIÓN</h2>
-            <div class="mb-8 p-4 admin-info-bar flex justify-between items-center">
-                <p id="monitoring-status-text" class="flex items-center text-lg"></p>
-                <button id="logout-button" class="btn-primary-tech btn-logout text-sm"><i class="fas fa-power-off mr-2"></i> CERRAR SESIÓN</button>
+            <h2 class="text-3xl font-bold mb-8 admin-header-title pb-3 tracking-wider flex items-center">
+                <i class="fas fa-tachometer-alt text-2xl mr-3"></i> CENTRO DE OPERACIONES Y GESTIÓN 
+            </h2>
+            
+            <div class="mb-8 p-4 admin-info-bar text-white font-semibold rounded-lg shadow-xl flex justify-between items-center">
+                <p id="monitoring-status-text" class="flex items-center text-lg">
+                    <!-- Contenido dinámico desde JS -->
+                </p>
+                
+                <button id="logout-button" class="btn-primary-tech btn-logout text-sm">
+                    <i class="fas fa-power-off mr-2"></i> CERRAR SESIÓN
+                </button>
             </div>
 
             <div class="card-tech mb-10">
-                <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center"><i class="fas fa-user-plus mr-2 text-color-accent-lime"></i> REGISTRO DE NUEVO PERSONAL</h3>
+                <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center">
+                    <i class="fas fa-user-plus mr-2 text-color-accent-lime"></i> REGISTRO DE NUEVO PERSONAL
+                </h3>
                 <form id="admin-record-form" class="space-y-4">
+                    
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div><label for="input-sex-admin" class="label-tech">SEXO</label><select id="input-sex-admin" required class="input-tech"><option value="Masculino">Masculino</option><option value="Femenino">Femenino</option></select></div>
-                        <div><label for="input-userid" class="label-tech">CIP</label><input type="text" id="input-userid" placeholder="Ej: 12345678" class="input-tech" required></div>
-                        <div><label for="input-role" class="label-tech">GRADO</label><select id="input-role" required class="input-tech"><option value="" disabled selected>Seleccione un Grado</option><optgroup label="OFICIALES"><option value="Gral Div">Gral Div</option><option value="Gral Brig">Gral Brig</option><option value="Coronel">Coronel</option><option value="Tte Crl">Tte Crl</option><option value="Mayor">Mayor</option><option value="Capitán">Capitán</option><option value="Teniente">Teniente</option><option value="Alfrz/ Sub Tte">Alfrz/ Sub Tte</option></optgroup><optgroup label="SUB ALTERNO"><option value="Tc Jf Sup">Tc Jf Sup</option><option value="Tc Jefe">Tc Jefe</option><option value="Tco 1°">Tco 1°</option><option value="Tco 2°">Tco 2°</option><option value="Tco 3°">Tco 3°</option><option value="So 1°">So 1°</option><option value="So 2°">So 2°</option><option value="So 3°">So 3°</option></optgroup></select></div>
-                        <div><label for="input-age-admin" class="label-tech">EDAD</label><input type="number" id="input-age-admin" placeholder="Ej: 35" min="18" max="100" class="input-tech" required></div>
+                        <div>
+                            <label for="input-sex-admin" class="label-tech">SEXO</label>
+                            <select id="input-sex-admin" required class="input-tech">
+                                <option value="Masculino">Masculino</option>
+                                <option value="Femenino">Femenino</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="input-userid" class="label-tech">CIP</label>
+                            <input type="text" id="input-userid" placeholder="Ej: 12345678" class="input-tech" required>
+                        </div>
+                          <div>
+                            <label for="input-role" class="label-tech">GRADO</label>
+                            <select id="input-role" required class="input-tech">
+                                <option value="" disabled selected>Seleccione un Grado</option>
+                                
+                                <optgroup label="OFICIALES">
+                                    <option value="Gral Div">Gral Div</option>
+                                    <option value="Gral Brig">Gral Brig</option>
+                                    <option value="Coronel">Coronel</option>
+                                    <option value="Tte Crl">Tte Crl</option>
+                                    <option value="Mayor">Mayor</option>
+                                    <option value="Capitán">Capitán</option>
+                                    <option value="Teniente">Teniente</option>
+                                    <option value="Alfrz/ Sub Tte">Alfrz/ Sub Tte</option>
+                                </optgroup>
+                                
+                                <optgroup label="SUB ALTERNO">
+                                    <option value="Tc Jf Sup">Tc Jf Sup</option>
+                                    <option value="Tc Jefe">Tc Jefe</option>
+                                    <option value="Tco 1°">Tco 1°</option>
+                                    <option value="Tco 2°">Tco 2°</option>
+                                    <option value="Tco 3°">Tco 3°</option>
+                                    <option value="So 1°">So 1°</option>
+                                    <option value="So 2°">So 2°</option>
+                                    <option value="So 3°">So 3°</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                          <div>
+                            <label for="input-age-admin" class="label-tech">EDAD</label>
+                            <input type="number" id="input-age-admin" placeholder="Ej: 35" min="18" max="100" class="input-tech" required>
+                        </div>
                     </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div><label for="input-lastname" class="label-tech">APELLIDOS</label><input type="text" id="input-lastname" placeholder="Ej: Galarza Díaz" class="input-tech" required></div>
-                        <div><label for="input-firstname" class="label-tech">NOMBRES</label><input type="text" id="input-firstname" placeholder="Ej: Marco Antonio" class="input-tech" required></div>
-                        <div><label for="input-weight-admin" class="label-tech">PESO (kg)</label><input type="number" id="input-weight-admin" placeholder="Ej: 75.5" min="20" step="0.1" required class="input-tech"></div>
-                        <div><label for="input-height-admin" class="label-tech">ALTURA (metros)</label><input type="number" id="input-height-admin" placeholder="Ej: 1.75" min="0.5" step="0.01" required class="input-tech"></div>
+                          <div>
+                            <label for="input-lastname" class="label-tech">APELLIDOS</label>
+                            <input type="text" id="input-lastname" placeholder="Ej: Galarza Díaz" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-firstname" class="label-tech">NOMBRES</label>
+                            <input type="text" id="input-firstname" placeholder="Ej: Marco Antonio" class="input-tech" required>
+                        </div>
+                          <div>
+                            <label for="input-weight-admin" class="label-tech">PESO (kg)</label>
+                            <input type="number" id="input-weight-admin" placeholder="Ej: 75.5" min="20" step="0.1" required class="input-tech">
+                        </div>
+                        <div>
+                            <label for="input-height-admin" class="label-tech">ALTURA (metros)</label>
+                            <input type="number" id="input-height-admin" placeholder="Ej: 1.75" min="0.5" step="0.01" required class="input-tech">
+                        </div>
                     </div>
-                    <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6"><i class="fas fa-database mr-2"></i> GUARDAR Y CALCULAR APTITUD</button>
+                    
+                    <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6">
+                        <i class="fas fa-database mr-2"></i> GUARDAR Y CALCULAR APTITUD
+                    </button>
+                    
                     <div id="admin-result-box" class="mt-8 p-6 rounded-lg hidden border-l-4 border-color-accent-lime bg-color-green-darker">
                         <h3 class="text-lg font-bold mb-4 text-color-accent-gold border-b border-color-border pb-2 flex items-center"><i class="fas fa-poll mr-2"></i> Resultado de Cálculo (Guardado)</h3>
                         <div class="flex flex-col sm:flex-row justify-between items-center text-center sm:text-left">
-                            <div><p class="text-sm text-color-text-muted">Índice de Masa Corporal:</p><p class="text-4xl font-extrabold" id="admin-bmi-value" style="color:var(--color-accent-lime);">--</p></div>
-                            <div class="mt-4 sm:mt-0 text-right"><p class="text-sm text-color-text-muted mb-1">Diagnóstico de Aptitud:</p><span id="admin-aptitude-badge" class="px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase"></span><p id="admin-aptitude-detail" class="text-xs mt-2 text-color-text-muted italic"></p></div>
+                            <div>
+                                <p class="text-sm text-color-text-muted">Índice de Masa Corporal:</p>
+                                <p class="text-4xl font-extrabold leading-none tracking-tighter" id="admin-bmi-value" style="color:var(--color-accent-lime);">--</p>
+                            </div>
+                            <div class="mt-4 sm:mt-0 text-right">
+                                <p class="text-sm text-color-text-muted mb-1">Diagnóstico de Aptitud:</p>
+                                <span id="admin-aptitude-badge" class="px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase"></span>
+                                <p id="admin-aptitude-detail" class="text-xs mt-2 text-color-text-muted italic"></p>
+                            </div>
                         </div>
                     </div>
+                    
                 </form>
             </div>
             
             <h3 class="text-xl font-bold text-color-accent-gold mb-4 mt-6 border-b border-color-border pb-2 flex items-center col-span-full"><i class="fas fa-table mr-2 text-color-primary-green"></i> REGISTROS OPERACIONALES</h3>
+            
             <div class="flex flex-wrap items-end gap-4 mb-6">
-                <div><label for="month-filter" class="label-tech inline-block mb-1">Filtrar por Mes:</label><select id="month-filter" class="input-tech text-sm w-48"><option value="">Todos los Meses</option></select></div>
-                <div><label for="name-filter" class="label-tech inline-block mb-1">Buscar por Nombre/Apellido:</label><input type="text" id="name-filter" placeholder="Escriba Apellido o Nombre" class="input-tech text-sm w-64"></div>
-                <div><label for="age-filter" class="label-tech inline-block mb-1">Buscar por Edad:</label><input type="number" id="age-filter" placeholder="Ej: 45" min="18" max="100" class="input-tech text-sm w-24"></div>
-                <button id="export-word-button" class="btn-primary-tech btn-export text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-lg ml-auto"><i class="fas fa-file-word mr-2"></i> EXPORTAR A WORD</button>
+                <div>
+                    <label for="month-filter" class="label-tech inline-block mb-1">Filtrar por Mes:</label>
+                    <select id="month-filter" class="input-tech text-sm w-48">
+                        <option value="">Todos los Meses</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="name-filter" class="label-tech inline-block mb-1">Buscar por Nombre/Apellido:</label>
+                    <input type="text" id="name-filter" placeholder="Escriba Apellido o Nombre" class="input-tech text-sm w-64">
+                </div>
+                
+                <div>
+                    <label for="age-filter" class="label-tech inline-block mb-1">Buscar por Edad:</label>
+                    <input type="number" id="age-filter" placeholder="Ej: 45" min="18" max="100" class="input-tech text-sm w-24">
+                </div>
+                <button id="export-word-button" class="btn-primary-tech btn-export text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-lg ml-auto">
+                    <i class="fas fa-file-word mr-2"></i> EXPORTAR A WORD
+                </button>
             </div>
             <div class="overflow-x-auto table-container rounded-xl shadow-2xl p-2 col-span-full">
                 <table class="min-w-full divide-y divide-color-border">
-                    <thead><tr class="admin-table-header"></tr></thead>
-                    <tbody id="admin-table-body" class="divide-y divide-color-border text-white"></tbody>
+                    <thead>
+                        <tr class="admin-table-header"> 
+                            <!-- Headers se generan dinámicamente -->
+                        </tr>
+                    </thead>
+                    <tbody id="admin-table-body" class="divide-y divide-color-border text-white"> 
+                        <tr><td colspan="10" class="text-center py-10 text-color-text-muted text-lg font-semibold">Cargando inteligencia de datos...</td></tr>
+                    </tbody>
                 </table>
             </div>
 
+            <!-- =========== SECCIÓN DE GESTIÓN DE USUARIOS (MODIFICADA) =========== -->
             <div id="user-management-section" class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-16 col-span-full border-t-2 border-color-border pt-8">
+
+                <!-- Columna para Añadir Nuevo Usuario -->
                 <div class="card-tech">
-                    <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center"><i class="fas fa-user-shield mr-2 text-color-accent-lime"></i> AÑADIR NUEVO ADMINISTRADOR</h3>
+                    <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center">
+                        <i class="fas fa-user-shield mr-2 text-color-accent-lime"></i> AÑADIR NUEVO ADMINISTRADOR
+                    </h3>
                     <form id="add-user-form" class="space-y-4">
-                        <div><label for="input-new-cip" class="label-tech">CIP del Nuevo Usuario</label><input type="text" id="input-new-cip" placeholder="Ej: 98765432" class="input-tech" required></div>
-                        <div><label for="input-new-fullname" class="label-tech">Nombre Completo</label><input type="text" id="input-new-fullname" placeholder="Ej: Perez Torres Juan" class="input-tech" required></div>
-                        <div><label for="input-new-password" class="label-tech">Contraseña Temporal</label><input type="password" id="input-new-password" placeholder="•••••••••" class="input-tech" required></div>
-                        <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6"><i class="fas fa-plus-circle mr-2"></i> Crear Usuario</button>
+                        <div>
+                            <label for="input-new-cip" class="label-tech">CIP del Nuevo Usuario</label>
+                            <input type="text" id="input-new-cip" placeholder="Ej: 98765432" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-new-fullname" class="label-tech">Nombre Completo</label>
+                            <input type="text" id="input-new-fullname" placeholder="Ej: Perez Torres Juan" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-new-password" class="label-tech">Contraseña Temporal</label>
+                            <input type="password" id="input-new-password" placeholder="•••••••••" class="input-tech" required>
+                        </div>
+                        <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6">
+                            <i class="fas fa-plus-circle mr-2"></i> Crear Usuario
+                        </button>
                     </form>
                 </div>
+            
+                <!-- Columna para la Tabla de Usuarios Existentes -->
                 <div class="card-tech">
-                    <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center"><i class="fas fa-users-cog mr-2 text-color-primary-green"></i> ADMINISTRADORES ACTUALES</h3>
+                    <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center">
+                        <i class="fas fa-users-cog mr-2 text-color-primary-green"></i> ADMINISTRADORES ACTUALES
+                    </h3>
                     <div class="overflow-y-auto table-container rounded-xl p-2" style="max-height: 300px;">
                         <table class="min-w-full">
                             <thead>
@@ -167,14 +327,21 @@
                                     <th class="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-color-accent-lime">ACCIÓN</th>
                                 </tr>
                             </thead>
-                            <tbody id="users-table-body" class="divide-y divide-color-border text-white"></tbody>
+                            <tbody id="users-table-body" class="divide-y divide-color-border text-white">
+                                <!-- Las filas de usuarios se cargarán aquí dinámicamente -->
+                                <tr><td colspan="3" class="text-center py-6">Cargando usuarios...</td></tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
+            
             </div>
+            <!-- =========== FIN DE LA SECCIÓN =========== -->
+
         </section>
     </main>
 
+    
     <footer class="bg-color-green-dark text-color-text-muted text-center p-4 mt-12 border-t border-color-border">
         <p class="text-sm tracking-wider">&copy; 2025 III División del Ejército del Perú. <span class="text-color-primary-green font-bold">Patria y Honor.</span></p>
     </footer>
