@@ -233,7 +233,8 @@ function updateAdminTableHeaders() {
 
 function getSimplifiedAptitudeStyle(resultado) {
     if (resultado.includes('INAPTO')) return 'bg-red-700 text-white';
-    return 'bg-green-700 text-white';
+    // Si incluye APTO (EXCEPCIÓN PAB), usa el verde de apto
+    return 'bg-green-700 text-white'; 
 }
 
 
@@ -283,6 +284,7 @@ function getRiskByWaist(sexo, pab) {
 // --- Función getAptitude (MODIFICADA para incluir PAB y PA y REGLA DE EXCEPCIÓN) ---
 function getAptitude(imc, sexo, pab, paString) {
     const imcFloat = parseFloat(imc);
+    const pabFloat = parseFloat(pab); // <--- Mover pabFloat aquí para usarlo en la excepción
     let clasificacionMINSA, resultado, detalle;
     
     // 1. Clasificación MINSA (Clasificación de IMC)
@@ -320,13 +322,11 @@ function getAptitude(imc, sexo, pab, paString) {
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. PA: ${paClasificacion}. Aptitud confirmada.`;
     }
 
-    // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (PAB < 94)
-    const pabFloat = parseFloat(pab);
-
-    if (resultado.includes('INAPTO') && pabFloat < 94) {
-        // Esta regla sobrescribe el resultado INAPTO.
+    // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (PAB < 94) <--- Regla final y más importante
+    if (resultado.startsWith('INAPTO') && pabFloat < 94) {
+        // Esta regla sobrescribe el resultado INAPTO, convirtiéndolo en APTO.
         resultado = "APTO (EXCEPCIÓN PAB)";
-        detalle = `Resultado original: ${resultado}. Sobrescrito por Regla Médica: PAB < 94, se considera APTO.`;
+        detalle = `Resultado original: ${clasificacionMINSA}. Sobrescrito por Regla Médica: PAB < 94, se considera APTO.`;
     }
     
     // Devolver todos los resultados necesarios
@@ -584,7 +584,8 @@ function filterTable() {
     const nameSearchTerm = document.getElementById('name-filter').value.toLowerCase().trim();
     const ageFilterValue = document.getElementById('age-filter').value;
     const monthFilter = document.getElementById('month-filter').value;
-    const aptitudeFilterValue = document.getElementById('aptitude-filter').value.toUpperCase(); // <-- FILTRO AÑADIDO
+    // MEJORA: Garantizar que el valor sea una cadena vacía si no hay selección
+    const aptitudeFilterValue = (document.getElementById('aptitude-filter').value || '').toUpperCase(); 
 
     let recordsToDisplay = allRecordsFromDB;
     
@@ -617,6 +618,7 @@ function filterTable() {
             // Lógica de filtrado de Aptitud
             if (aptitudeFilterValue === 'APTO') {
                 // Filtra por APTO, incluyendo APTO (EXCEPCIÓN PAB), pero excluyendo APTO (MONITOREO)
+                // Se usa startsWith('APTO') para capturar 'APTO' y 'APTO (EXCEPCIÓN PAB)'
                 return resultado.startsWith('APTO') && !resultado.includes('MONITOREO');
             } else if (aptitudeFilterValue === 'MONITOREO') {
                 return resultado.includes('MONITOREO');
