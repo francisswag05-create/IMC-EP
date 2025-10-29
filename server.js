@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: server.js (VERSIÓN FINAL Y COMPLETA CON NUEVOS CAMPOS CLÍNICOS)
+// Archivo: server.js (VERSIÓN FINAL Y COMPLETA CON NUEVOS CAMPOS CLÍNICOS y EXCELJS)
 // =================================================================================================
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
@@ -10,6 +10,7 @@ const path = require('path');
 const cors = require('cors'); 
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const ExcelJS = require('exceljs'); // <--- IMPORTACIÓN DE EXCELJS
 
 const app = express();
 const PORT = process.env.PORT || 3000; 
@@ -109,6 +110,120 @@ app.delete('/api/records/:id', (req, res) => {
         if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
         res.json({ message: `Registro con ID ${id} eliminado.` });
     });
+});
+
+
+// [POST] /api/export-excel
+app.post('/api/export-excel', async (req, res) => {
+    try {
+        const records = req.body; // Recibe los datos filtrados del cliente
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('CONSOLIDADO IMC');
+        
+        // --- 1. Definición de Estilos ---
+        const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF365F37' } }; // Verde Oscuro
+        const LIGHT_GREEN_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6CB668' } }; // Verde Claro para datos
+        const FONT_WHITE = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+        const BORDER_THIN = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        const FONT_RED = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFF0000' } }; // Rojo para INAPTO/Riesgo
+        const FONT_NORMAL = { name: 'Calibri', size: 11 };
+
+        // --- 2. Encabezados (19 Columnas) ---
+        const HEADERS = [
+            "N", "GGUU", "UNIDAD", "GRADO", "APELLIDOS Y NOMBRES", "DNI", "CIP", 
+            "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION", 
+            "PBA", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", "MOTIVO", "DIGITADOR"
+        ];
+        
+        // --- 3. Aplicar Formato a la Fila de Encabezados (Fila 6, desde A6) ---
+        const headerRow = worksheet.getRow(6);
+        headerRow.values = HEADERS;
+        
+        headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+            cell.fill = HEADER_FILL;
+            cell.font = FONT_WHITE;
+            cell.border = BORDER_THIN;
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            // Establecer anchos de columna predeterminados
+            worksheet.getColumn(colNumber).width = (colNumber === 5) ? 30 : 12; 
+        });
+        
+        // --- 4. Rellenar Filas de Datos ---
+        records.forEach((record, index) => {
+            const rowNumber = 7 + index; // Empieza en la fila 7
+            const dataRow = worksheet.getRow(rowNumber);
+            
+            // Los campos que ya vienen calculados del cliente
+            const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase();
+            const paClasificacion = (record.paClasificacion || 'N/A').toUpperCase();
+            const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
+            const resultado = (record.resultado || 'N/A').toUpperCase();
+            
+            // Datos en el orden de los encabezados (19 campos)
+            dataRow.values = [
+                index + 1, // N
+                record.gguu, // GGUU
+                record.unidad, // UNIDAD
+                record.grado, // GRADO
+                `${(record.apellido || '').toUpperCase()}, ${record.nombre || ''}`, // APELLIDOS Y NOMBRES
+                record.dni, // DNI
+                record.cip, // CIP
+                record.sexo, // SEXO
+                record.edad, // EDAD
+                record.pa, // PA
+                paClasificacion, // CLASIFICACION (PA)
+                record.pab, // PBA
+                riesgoAEnf, // RIESGO A ENF SEGUN PABD
+                record.peso, // PESO
+                record.altura, // TALLA
+                record.imc, // IMC
+                clasificacionIMC, // CLASIFICACION DE IMC
+                record.motivo || '### NO ASISTIO', // MOTIVO
+                record.registradoPor // DIGITADOR
+            ];
+            
+            // Aplicar formato a la fila
+            dataRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+                cell.fill = LIGHT_GREEN_FILL; // Fondo verde claro
+                cell.border = BORDER_THIN;
+                cell.font = FONT_NORMAL;
+                
+                // Formato Condicional (Ej: Columna 17 'CLASIFICACION DE IMC' o riesgos)
+                if (colNumber === 17 && (resultado.includes('INAPTO') || clasificacionIMC.includes('OBESIDAD'))) {
+                    cell.font = FONT_RED; 
+                }
+                
+                // Formato Condicional para Riesgo y Clasificación de PA (Col 11 y 13)
+                if ((colNumber === 11 && paClasificacion.includes('HIPERTENSION')) || (colNumber === 13 && riesgoAEnf.includes('MUY ALTO'))) {
+                    cell.font = FONT_RED;
+                }
+            });
+        });
+        
+        // --- 5. Títulos y Metadatos Adicionales (Filas 1, 3, 4, 5) ---
+        worksheet.mergeCells('A1:S2');
+        worksheet.getCell('A1').value = 'CONSOLIDADO DEL IMC DE LA III DE AF 2025';
+        worksheet.getCell('A1').font = { name: 'Calibri', size: 16, bold: true };
+        worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+        
+        worksheet.mergeCells('A4:S4');
+        worksheet.getCell('A4').value = 'PESADA MENSUAL - MES DE SETIEMBRE';
+        worksheet.getCell('A4').font = { name: 'Calibri', size: 14, bold: true };
+        worksheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle' };
+        
+        // --- 6. Configuración de Respuesta ---
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=' + 'Reporte_SIMCEP_Mensual.xlsx');
+        
+        // Escribir el archivo y enviarlo
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error("Error al generar el archivo Excel:", error);
+        res.status(500).json({ message: "Error interno al generar el reporte Excel.", error: error.message });
+    }
 });
 
 
