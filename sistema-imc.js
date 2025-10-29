@@ -1,6 +1,3 @@
-// =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN, EXCEL Y GESTIÓN DE USUARIOS COMPLETA)
-// =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
 let isAuthenticated = false;

@@ -1,6 +1,3 @@
-// =================================================================================================
-// Archivo: server.js (VERSIÓN FINAL Y COMPLETA CON NUEVOS CAMPOS CLÍNICOS y EXCELJS)
-// =================================================================================================
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
