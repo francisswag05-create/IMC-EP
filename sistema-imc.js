@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - COMPATIBILIDAD CSV)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - LLAMADA AL SERVIDOR)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
@@ -36,7 +36,7 @@ function displayMessage(title, text, type) {
 }
 
 
-// --- FUNCIONES PARA GESTIÓN DE USUARIOS (MOVIDAS ARRIBA para resolver el ReferenceError) ---
+// --- FUNCIONES PARA GESTIÓN DE USUARIOS ---
 
 async function fetchAndDisplayUsers() {
     const tableBody = document.getElementById('users-table-body');
@@ -691,6 +691,7 @@ function exportToExcel() {
     })
     .then(response => {
         if (!response.ok) {
+            // Manejar errores del servidor (404, 500)
             return response.json().then(error => { throw new Error(error.message || 'Error desconocido del servidor.'); });
         }
         // El servidor devuelve el archivo como un blob binario
@@ -728,13 +729,18 @@ document.getElementById('bmi-form').addEventListener('submit', function(e) {
     e.preventDefault();
     const weight = parseFloat(document.getElementById('input-weight').value);
     const height = parseFloat(document.getElementById('input-height').value);
+    const pab = parseFloat(document.getElementById('input-pab-public').value); // <-- NUEVO
+    const sex = document.getElementById('input-sex').value;
     
-    if (weight > 0 && height > 0) {
-        // En el formulario público, no pedimos PBA ni PA, así que la lógica es simplificada (solo IMC)
+    // NOTA: Para el formulario público, no pedimos PA, usaremos N/A o un valor neutral.
+    const pa = 'N/A'; 
+    
+    if (weight > 0 && height > 0 && pab > 0) { // <-- VALIDACIÓN PAB
         const imc = calculateIMC(weight, height);
-        // Usamos valores de PA y PBA que no activan el riesgo (Masculino, 0cm, N/A)
-        const { resultado, detalle } = getAptitude(imc, 'Masculino', 0, 'N/A'); 
         
+        // LLAMADA A LA LÓGICA CLÍNICA COMPLETA
+        const { resultado, detalle } = getAptitude(imc, sex, pab, pa); 
+
         const badgeClass = resultado.includes('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
         document.getElementById('bmi-value').textContent = imc;
         const aptitudeBadge = document.getElementById('aptitude-badge');
@@ -743,7 +749,7 @@ document.getElementById('bmi-form').addEventListener('submit', function(e) {
         document.getElementById('aptitude-detail').textContent = detalle;
         document.getElementById('result-box').classList.remove('hidden');
     } else {
-        displayMessage('Datos Inválidos', 'Por favor, ingrese un peso y altura válidos.', 'error');
+        displayMessage('Datos Inválidos', 'Por favor, ingrese Peso, Altura y Perímetro Abdominal válidos.', 'error');
     }
 });
 
