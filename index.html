@@ -25,7 +25,6 @@
             font-size: 1.75rem;
             font-weight: 900; 
             letter-spacing: 0.05em; 
-            line-height: 1.1; 
             color: var(--color-accent-gold); 
             margin: 0; 
             padding: 0; 
@@ -82,13 +81,12 @@
                         <i class="fas fa-sign-in-alt mr-2"></i> ACCEDER
                     </button>
                     
-                    <!-- INICIO DEL CÓDIGO AÑADIDO: ENLACE DE RECUPERACIÓN -->
+                    <!-- ENLACE DE RECUPERACIÓN -->
                     <p class="text-center text-xs pt-2">
                         <a href="#" id="forgot-password-link" class="text-color-text-muted hover:text-white transition-colors duration-300">
                             ¿Olvidó su contraseña?
                         </a>
                     </p>
-                    <!-- FIN DEL CÓDIGO AÑADIDO: ENLACE DE RECUPERACIÓN -->
                     
                 </div>
             </div>
@@ -161,25 +159,36 @@
                 <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center">
                     <i class="fas fa-user-plus mr-2 text-color-accent-lime"></i> REGISTRO DE NUEVO PERSONAL
                 </h3>
+                
+                <!-- INICIO DEL FORMULARIO DE REGISTRO DE PERSONAL MODIFICADO -->
                 <form id="admin-record-form" class="space-y-4">
                     
+                    <!-- Fila 1: GGUU, UNIDAD, DNI, CIP -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
-                            <label for="input-sex-admin" class="label-tech">SEXO</label>
-                            <select id="input-sex-admin" required class="input-tech">
-                                <option value="Masculino">Masculino</option>
-                                <option value="Femenino">Femenino</option>
-                            </select>
+                            <label for="input-gguu" class="label-tech">GGUU</label>
+                            <input type="text" id="input-gguu" placeholder="Ej: III DE" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-unidad" class="label-tech">UNIDAD</label>
+                            <input type="text" id="input-unidad" placeholder="Ej: CIA CMDTO/C3" class="input-tech" required>
+                        </div>
+                        <div>
+                            <label for="input-dni" class="label-tech">DNI</label>
+                            <input type="text" id="input-dni" placeholder="Ej: 12345678" class="input-tech" required>
                         </div>
                         <div>
                             <label for="input-userid" class="label-tech">CIP</label>
-                            <input type="text" id="input-userid" placeholder="Ej: 12345678" class="input-tech" required>
+                            <input type="text" id="input-userid" placeholder="Ej: 87654321" class="input-tech" required>
                         </div>
-                          <div>
+                    </div>
+
+                    <!-- Fila 2: GRADO, SEXO, EDAD, PA -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
                             <label for="input-role" class="label-tech">GRADO</label>
                             <select id="input-role" required class="input-tech">
                                 <option value="" disabled selected>Seleccione un Grado</option>
-                                
                                 <optgroup label="OFICIALES">
                                     <option value="Gral Div">Gral Div</option>
                                     <option value="Gral Brig">Gral Brig</option>
@@ -190,7 +199,6 @@
                                     <option value="Teniente">Teniente</option>
                                     <option value="Alfrz/ Sub Tte">Alfrz/ Sub Tte</option>
                                 </optgroup>
-                                
                                 <optgroup label="SUB ALTERNO">
                                     <option value="Tc Jf Sup">Tc Jf Sup</option>
                                     <option value="Tc Jefe">Tc Jefe</option>
@@ -203,14 +211,26 @@
                                 </optgroup>
                             </select>
                         </div>
-                          <div>
+                        <div>
+                            <label for="input-sex-admin" class="label-tech">SEXO</label>
+                            <select id="input-sex-admin" required class="input-tech">
+                                <option value="Masculino">Masculino</option>
+                                <option value="Femenino">Femenino</option>
+                            </select>
+                        </div>
+                        <div>
                             <label for="input-age-admin" class="label-tech">EDAD</label>
                             <input type="number" id="input-age-admin" placeholder="Ej: 35" min="18" max="100" class="input-tech" required>
                         </div>
+                        <div>
+                            <label for="input-pa" class="label-tech">PA (Presión Arterial)</label>
+                            <input type="text" id="input-pa" placeholder="Ej: 120/80" class="input-tech" required>
+                        </div>
                     </div>
 
+                    <!-- Fila 3: APELLIDOS, NOMBRES, PESO, ALTURA -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <div>
+                        <div>
                             <label for="input-lastname" class="label-tech">APELLIDOS</label>
                             <input type="text" id="input-lastname" placeholder="Ej: Galarza Díaz" class="input-tech" required>
                         </div>
@@ -218,7 +238,7 @@
                             <label for="input-firstname" class="label-tech">NOMBRES</label>
                             <input type="text" id="input-firstname" placeholder="Ej: Marco Antonio" class="input-tech" required>
                         </div>
-                          <div>
+                        <div>
                             <label for="input-weight-admin" class="label-tech">PESO (kg)</label>
                             <input type="number" id="input-weight-admin" placeholder="Ej: 75.5" min="20" step="0.1" required class="input-tech">
                         </div>
@@ -226,6 +246,18 @@
                             <label for="input-height-admin" class="label-tech">ALTURA (metros)</label>
                             <input type="number" id="input-height-admin" placeholder="Ej: 1.75" min="0.5" step="0.01" required class="input-tech">
                         </div>
+                    </div>
+                    
+                    <!-- Fila 4: PBA (Perímetro Abdominal) -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label for="input-pab" class="label-tech">PBA (Perím. Abdom. cm)</label>
+                            <input type="number" id="input-pab" placeholder="Ej: 95" min="30" step="0.1" required class="input-tech">
+                        </div>
+                        <!-- Espacios vacíos para mantener la columna -->
+                        <div></div> 
+                        <div></div>
+                        <div></div> 
                     </div>
                     
                     <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6">
@@ -248,10 +280,13 @@
                     </div>
                     
                 </form>
+                <!-- FIN DEL FORMULARIO DE REGISTRO DE PERSONAL MODIFICADO -->
+
             </div>
             
             <h3 class="text-xl font-bold text-color-accent-gold mb-4 mt-6 border-b border-color-border pb-2 flex items-center col-span-full"><i class="fas fa-table mr-2 text-color-primary-green"></i> REGISTROS OPERACIONALES</h3>
             
+            <!-- INICIO DE FILTROS Y BOTONES MODIFICADOS -->
             <div class="flex flex-wrap items-end gap-4 mb-6">
                 <div>
                     <label for="month-filter" class="label-tech inline-block mb-1">Filtrar por Mes:</label>
@@ -269,10 +304,18 @@
                     <label for="age-filter" class="label-tech inline-block mb-1">Buscar por Edad:</label>
                     <input type="number" id="age-filter" placeholder="Ej: 45" min="18" max="100" class="input-tech text-sm w-24">
                 </div>
-                <button id="export-word-button" class="btn-primary-tech btn-export text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-lg ml-auto">
-                    <i class="fas fa-file-word mr-2"></i> EXPORTAR A WORD
-                </button>
+                
+                <div class="ml-auto flex items-end gap-4">
+                    <button id="export-excel-button" class="btn-primary-tech btn-export text-sm bg-color-primary-green hover:bg-green-700 text-white shadow-lg">
+                        <i class="fas fa-file-excel mr-2"></i> EXPORTAR A EXCEL
+                    </button>
+                    <button id="export-word-button" class="btn-primary-tech btn-export text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-lg">
+                        <i class="fas fa-file-word mr-2"></i> EXPORTAR A WORD
+                    </button>
+                </div>
             </div>
+            <!-- FIN DE FILTROS Y BOTONES MODIFICADOS -->
+
             <div class="overflow-x-auto table-container rounded-xl shadow-2xl p-2 col-span-full">
                 <table class="min-w-full divide-y divide-color-border">
                     <thead>
