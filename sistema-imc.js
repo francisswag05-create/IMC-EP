@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - CORREGIDO)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - COMPATIBILIDAD CSV)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
@@ -669,13 +669,16 @@ function exportToExcel() {
         return;
     }
     
+    // El separador de campo en Excel para regiones en español suele ser el punto y coma (;).
+    const SEPARATOR = ';'; 
+
     // 1. Encabezados EXACTOS según el formato de la imagen (19 columnas)
     const headers = [
         "N", "GGUU", "UNIDAD", "GRADO", "APELLIDOS Y NOMBRES", "DNI", "CIP", 
         "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION", 
         "PBA", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", 
         "MOTIVO", "DIGITADOR"
-    ].join('\t'); // Separador de tabulación
+    ].join(SEPARATOR).toUpperCase();
 
     let dataRows = [];
     
@@ -687,7 +690,12 @@ function exportToExcel() {
         const adminRoleText = record.registradoPor && (record.registradoPor.includes('MD') || record.registradoPor.includes('DR')) ? 'MD, DR' : 'ADMIN';
         const digitadorDisplay = record.registradoPor ? `${record.registradoPor.split('(')[0].trim()} (${adminRoleText})` : `${currentAdminFullName} (${adminRoleText})`;
         
-        // 2. Construir la fila de datos (separada por tabulador \t)
+        // Preparar la clasificación para la tabla
+        const paClasificacionDisplay = paClasificacion || record.paClasificacion || 'N/A';
+        const riesgoAEnfDisplay = riesgoAEnf || record.riesgoAEnf || 'N/A';
+        const clasificacionIMCDisplay = clasificacionMINSA || 'N/A';
+
+        // 2. Construir la fila de datos (separada por el nuevo SEPARATOR)
         const row = [
             index + 1, // N
             record.gguu || 'N/A', // GGUU
@@ -701,25 +709,26 @@ function exportToExcel() {
             record.peso || 'N/A', // PESO
             record.altura || 'N/A', // TALLA (Altura)
             record.pa || 'N/A', // PA
-            paClasificacion || record.paClasificacion || 'N/A', // CLASIFICACION (de PA)
+            paClasificacionDisplay.toUpperCase(), // CLASIFICACION (de PA)
             record.pab || 'N/A', // PBA
-            riesgoAEnf || record.riesgoAEnf || 'N/A', // RIESGO A ENF SEGUN PABD
+            riesgoAEnfDisplay.toUpperCase(), // RIESGO A ENF SEGUN PABD
             record.imc || 'N/A', // IMC
-            clasificacionMINSA || 'N/A', // CLASIFICACION DE IMC (Clasificación MINSA)
-            '###', // MOTIVO (Dejamos ### como marcador si no hay dato)
+            clasificacionIMCDisplay.toUpperCase(), // CLASIFICACION DE IMC (Clasificación MINSA)
+            '### NO ASISTIO', // MOTIVO (Dejamos ### como marcador si no hay dato)
             digitadorDisplay // DIGITADOR (Nombre completo (ROL))
-        ].join('\t');
+        ].join(SEPARATOR);
         
         dataRows.push(row);
     });
 
     const csvContent = headers + '\n' + dataRows.join('\n');
     
-    // Crear el Blob para la descarga (usando .xls para forzar la apertura en Excel)
+    // Crear el Blob para la descarga
     const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-    const filename = `Reporte_SIMCEP_Mensual_${date}.xls`; 
-    // Usamos BOM (\uFEFF) y application/vnd.ms-excel para compatibilidad
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'application/vnd.ms-excel;charset=utf-8' }); 
+    const filename = `Reporte_SIMCEP_Mensual_${date}.csv`; // CAMBIO A CSV
+    
+    // Usamos BOM (\uFEFF) y text/csv para mayor compatibilidad con Excel en español
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
     const url = URL.createObjectURL(blob);
     
     // Simular el clic
