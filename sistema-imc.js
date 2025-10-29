@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - LLAMADA AL SERVIDOR)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - COMPATIBILIDAD CSV)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
@@ -669,6 +669,9 @@ function exportToExcel() {
         return;
     }
     
+    // CAPTURAR EL MES DEL REPORTE DEL NUEVO INPUT
+    const reportMonth = document.getElementById('input-report-month').value.toUpperCase();
+    
     // Cambiar el texto del botón
     const btn = document.getElementById('export-excel-button');
     const originalHtml = btn.innerHTML;
@@ -679,10 +682,12 @@ function exportToExcel() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            // Agrega tu token de autenticación aquí si ya lo implementaste
         },
-        // Enviamos los datos filtrados y listos al servidor
-        body: JSON.stringify(currentFilteredRecords) 
+        // Enviamos los datos filtrados Y el mes del reporte al servidor
+        body: JSON.stringify({
+            records: currentFilteredRecords,
+            reportMonth: reportMonth 
+        })
     })
     .then(response => {
         if (!response.ok) {
@@ -778,9 +783,10 @@ document.getElementById('admin-record-form').addEventListener('submit', function
         document.getElementById('admin-aptitude-detail').textContent = detalle;
         document.getElementById('admin-result-box').classList.remove('hidden');
         
-        // Preparar el campo Digitador: Nombre Completo (ROL)
-        const adminRoleText = currentUserRole === 'superadmin' ? (currentAdminFullName.includes('MD') || currentAdminFullName.includes('DR') ? 'MD, DR' : 'SUPERADMIN') : 'ADMIN';
-        const digitadorFinal = `${currentAdminFullName} (${adminRoleText})`;
+        // Preparar el campo Digitador: [CIP/Nombre] ([Cargo] [Primer Apellido])
+        const primerApellido = currentAdminFullName.split(' ')[0] || ''; 
+        const adminRoleText = currentAdminFullName.includes('MD') || currentAdminFullName.includes('DR') ? 'DR/MD' : (currentUserRole === 'superadmin' ? 'SUPERADMIN' : 'ADMIN');
+        const digitadorFinal = `${currentAdminUser} (${adminRoleText} ${primerApellido})`; // <-- CORREGIDO
 
         if (isEditMode) {
             // AÑADIR TODOS LOS CAMPOS

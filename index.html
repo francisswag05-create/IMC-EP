@@ -160,7 +160,7 @@
                     <i class="fas fa-user-plus mr-2 text-color-accent-lime"></i> REGISTRO DE NUEVO PERSONAL
                 </h3>
                 
-                <!-- INICIO DEL FORMULARIO DE REGISTRO DE PERSONAL MODIFICADO -->
+                <!-- INICIO DEL FORMULARIO DE REGISTRO DE PERSONAL -->
                 <form id="admin-record-form" class="space-y-4">
                     
                     <!-- Fila 1: GGUU, UNIDAD, DNI, CIP -->
@@ -280,7 +280,7 @@
                     </div>
                     
                 </form>
-                <!-- FIN DEL FORMULARIO DE REGISTRO DE PERSONAL MODIFICADO -->
+                <!-- FIN DEL FORMULARIO DE REGISTRO DE PERSONAL -->
 
             </div>
             
@@ -304,6 +304,13 @@
                     <label for="age-filter" class="label-tech inline-block mb-1">Buscar por Edad:</label>
                     <input type="number" id="age-filter" placeholder="Ej: 45" min="18" max="100" class="input-tech text-sm w-24">
                 </div>
+                
+                <!-- INPUT MES DE REPORTE AÑADIDO AQUÍ -->
+                <div class="min-w-[150px]">
+                    <label for="input-report-month" class="label-tech inline-block mb-1">Mes del Reporte:</label>
+                    <input type="text" id="input-report-month" placeholder="Ej: DICIEMBRE" class="input-tech text-sm w-full" value="MES DE REPORTE">
+                </div>
+                <!-- FIN INPUT MES DE REPORTE -->
                 
                 <div class="ml-auto flex items-end gap-4">
                     <button id="export-excel-button" class="btn-primary-tech btn-export text-sm bg-color-primary-green hover:bg-green-700 text-white shadow-lg">
