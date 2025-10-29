@@ -116,18 +116,19 @@ app.delete('/api/records/:id', (req, res) => {
 // [POST] /api/export-excel
 app.post('/api/export-excel', async (req, res) => {
     try {
-        const records = req.body; // Recibe los datos filtrados del cliente
+        // RECIBIMOS EL OBJETO CON RECORDS Y REPORTMONTH
+        const { records, reportMonth } = req.body; 
 
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('CONSOLIDADO IMC');
         
         // --- 1. Definición de Estilos ---
         const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF365F37' } }; // Verde Oscuro
-        const LIGHT_GREEN_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6CB668' } }; // Verde Claro para datos
         const FONT_WHITE = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
         const BORDER_THIN = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         const FONT_RED = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFF0000' } }; // Rojo para INAPTO/Riesgo
         const FONT_NORMAL = { name: 'Calibri', size: 11 };
+        const NO_FILL = {}; // Fondo vacío para los datos
 
         // --- 2. Encabezados (19 Columnas) ---
         const HEADERS = [
@@ -154,7 +155,7 @@ app.post('/api/export-excel', async (req, res) => {
             const rowNumber = 7 + index; // Empieza en la fila 7
             const dataRow = worksheet.getRow(rowNumber);
             
-            // Los campos que ya vienen calculados del cliente
+            // Los campos que vienen calculados del cliente (sistema-imc.js)
             const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase();
             const paClasificacion = (record.paClasificacion || 'N/A').toUpperCase();
             const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
@@ -171,25 +172,25 @@ app.post('/api/export-excel', async (req, res) => {
                 record.cip, // CIP
                 record.sexo, // SEXO
                 record.edad, // EDAD
+                record.peso, // PESO
+                record.altura, // TALLA
                 record.pa, // PA
                 paClasificacion, // CLASIFICACION (PA)
                 record.pab, // PBA
                 riesgoAEnf, // RIESGO A ENF SEGUN PABD
-                record.peso, // PESO
-                record.altura, // TALLA
                 record.imc, // IMC
                 clasificacionIMC, // CLASIFICACION DE IMC
                 record.motivo || '### NO ASISTIO', // MOTIVO
                 record.registradoPor // DIGITADOR
             ];
             
-            // Aplicar formato a la fila
+            // Aplicar formato a la fila (MODIFICADO: Usar NO_FILL)
             dataRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-                cell.fill = LIGHT_GREEN_FILL; // Fondo verde claro
+                cell.fill = NO_FILL; // Aplicar fondo vacío
                 cell.border = BORDER_THIN;
                 cell.font = FONT_NORMAL;
                 
-                // Formato Condicional (Ej: Columna 17 'CLASIFICACION DE IMC' o riesgos)
+                // Formato Condicional (Col 17 'CLASIFICACION DE IMC' o riesgos)
                 if (colNumber === 17 && (resultado.includes('INAPTO') || clasificacionIMC.includes('OBESIDAD'))) {
                     cell.font = FONT_RED; 
                 }
@@ -201,14 +202,15 @@ app.post('/api/export-excel', async (req, res) => {
             });
         });
         
-        // --- 5. Títulos y Metadatos Adicionales (Filas 1, 3, 4, 5) ---
+        // --- 5. Títulos y Metadatos Adicionales ---
         worksheet.mergeCells('A1:S2');
         worksheet.getCell('A1').value = 'CONSOLIDADO DEL IMC DE LA III DE AF 2025';
         worksheet.getCell('A1').font = { name: 'Calibri', size: 16, bold: true };
         worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
         
         worksheet.mergeCells('A4:S4');
-        worksheet.getCell('A4').value = 'PESADA MENSUAL - MES DE SETIEMBRE';
+        // USAR reportMonth RECIBIDO DEL CLIENTE
+        worksheet.getCell('A4').value = `PESADA MENSUAL - ${reportMonth}`; 
         worksheet.getCell('A4').font = { name: 'Calibri', size: 14, bold: true };
         worksheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle' };
         
