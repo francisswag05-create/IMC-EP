@@ -1,4 +1,3 @@
-
 // --- 1. Variables de Estado Globales ---
 let isAuthenticated = false;
 let currentAdminUser = null; 
@@ -281,7 +280,7 @@ function getRiskByWaist(sexo, pab) {
 }
 
 
-// --- Función getAptitude (MODIFICADA para incluir PAB y PA) ---
+// --- Función getAptitude (MODIFICADA para incluir PAB y PA y REGLA DE EXCEPCIÓN) ---
 function getAptitude(imc, sexo, pab, paString) {
     const imcFloat = parseFloat(imc);
     let clasificacionMINSA, resultado, detalle;
@@ -319,6 +318,15 @@ function getAptitude(imc, sexo, pab, paString) {
     else { 
         resultado = "APTO";
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. PA: ${paClasificacion}. Aptitud confirmada.`;
+    }
+
+    // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (PAB < 94)
+    const pabFloat = parseFloat(pab);
+
+    if (resultado.includes('INAPTO') && pabFloat < 94) {
+        // Esta regla sobrescribe el resultado INAPTO.
+        resultado = "APTO (EXCEPCIÓN PAB)";
+        detalle = `Resultado original: ${resultado}. Sobrescrito por Regla Médica: PAB < 94, se considera APTO.`;
     }
     
     // Devolver todos los resultados necesarios
@@ -576,21 +584,49 @@ function filterTable() {
     const nameSearchTerm = document.getElementById('name-filter').value.toLowerCase().trim();
     const ageFilterValue = document.getElementById('age-filter').value;
     const monthFilter = document.getElementById('month-filter').value;
+    const aptitudeFilterValue = document.getElementById('aptitude-filter').value.toUpperCase(); // <-- FILTRO AÑADIDO
+
     let recordsToDisplay = allRecordsFromDB;
+    
+    // Aplicar Filtro de Nombre
     if (nameSearchTerm) {
         recordsToDisplay = recordsToDisplay.filter(record => 
             `${record.apellido} ${record.nombre}`.toLowerCase().includes(nameSearchTerm)
         );
     }
+    
+    // Aplicar Filtro de Edad
     if (ageFilterValue && !isNaN(parseInt(ageFilterValue))) {
         const ageToMatch = parseInt(ageFilterValue);
         recordsToDisplay = recordsToDisplay.filter(record => record.edad === ageToMatch);
     }
+    
+    // Aplicar Filtro de Mes
     if (monthFilter) {
         recordsToDisplay = recordsToDisplay.filter(record => 
             record.fecha && record.fecha.substring(3) === monthFilter
         );
     }
+    
+    // Aplicar NUEVO Filtro de Aptitud
+    if (aptitudeFilterValue) {
+        recordsToDisplay = recordsToDisplay.filter(record => {
+            // Recalcula la aptitud para asegurar que la nueva lógica (EXCEPCIÓN PAB) se aplique.
+            const { resultado } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
+            
+            // Lógica de filtrado de Aptitud
+            if (aptitudeFilterValue === 'APTO') {
+                // Filtra por APTO, incluyendo APTO (EXCEPCIÓN PAB), pero excluyendo APTO (MONITOREO)
+                return resultado.startsWith('APTO') && !resultado.includes('MONITOREO');
+            } else if (aptitudeFilterValue === 'MONITOREO') {
+                return resultado.includes('MONITOREO');
+            } else if (aptitudeFilterValue === 'INAPTO') {
+                return resultado.startsWith('INAPTO');
+            }
+            return true;
+        });
+    }
+
     currentFilteredRecords = recordsToDisplay;
     renderTable(currentFilteredRecords);
 }
@@ -611,6 +647,7 @@ function renderTable(records) {
     }
     records.forEach(data => {
         // LLAMADA ACTUALIZADA PARA OBTENER TODAS LAS CLASIFICACIONES
+        // El recalculo aquí asegura que el resultado se muestre correctamente con la nueva lógica de excepción
         const { resultado, paClasificacion, riesgoAEnf } = getAptitude(data.imc, data.sexo, data.pab, data.pa);
         const badgeClass = getSimplifiedAptitudeStyle(resultado);
         const rowBgClass = resultado.includes('INAPTO') ? 'bg-red-900/10' : '';
@@ -868,6 +905,7 @@ document.getElementById('forgot-password-link').addEventListener('click', functi
 document.getElementById('name-filter').addEventListener('input', filterTable);
 document.getElementById('age-filter').addEventListener('input', filterTable);
 document.getElementById('month-filter').addEventListener('change', filterTable);
+document.getElementById('aptitude-filter').addEventListener('change', filterTable); // <-- CONEXIÓN DEL NUEVO FILTRO
 document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
 
 document.addEventListener('DOMContentLoaded', () => {

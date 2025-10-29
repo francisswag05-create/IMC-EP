@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -315,6 +314,18 @@
                     <label for="age-filter" class="label-tech inline-block mb-1">Buscar por Edad:</label>
                     <input type="number" id="age-filter" placeholder="Ej: 45" min="18" max="100" class="input-tech text-sm w-24">
                 </div>
+                
+                <!-- NUEVO CAMPO: Filtrar por Aptitud (Añadido) -->
+                <div>
+                    <label for="aptitude-filter" class="label-tech inline-block mb-1">Filtrar por Aptitud:</label>
+                    <select id="aptitude-filter" class="input-tech text-sm w-48">
+                        <option value="">Todas las Aptitudes</option>
+                        <option value="APTO">APTO</option>
+                        <option value="INAPTO">INAPTO</option>
+                        <option value="MONITOREO">APTO (MONITOREO)</option>
+                    </select>
+                </div>
+                <!-- FIN NUEVO CAMPO -->
                 
                 <!-- INPUT MES DE REPORTE AÑADIDO AQUÍ -->
                 <div class="min-w-[150px]">
