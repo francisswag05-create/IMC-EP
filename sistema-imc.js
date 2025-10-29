@@ -1,5 +1,5 @@
 // =================================================================================================
-// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - COMPATIBILIDAD CSV)
+// Archivo: sistema-imc.js (VERSIÓN FINAL CON CLÍNICA, EDICIÓN Y EXCEL - LLAMADA AL SERVIDOR)
 // =================================================================================================
 
 // --- 1. Variables de Estado Globales ---
@@ -662,85 +662,58 @@ function exportToWord() {
 }
 
 
-// --- FUNCIÓN PARA EXPORTAR A EXCEL (TSV) ---
+// --- FUNCIÓN PARA EXPORTAR A EXCEL (LLAMA AL SERVIDOR) ---
 function exportToExcel() {
     if (!isAuthenticated || currentFilteredRecords.length === 0) {
         displayMessage('Error', 'No se puede exportar sin registros o sin autenticación.', 'error');
         return;
     }
     
-    // El separador de campo en Excel para regiones en español suele ser el punto y coma (;).
-    const SEPARATOR = ';'; 
+    // Cambiar el texto del botón
+    const btn = document.getElementById('export-excel-button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> GENERANDO...';
+    btn.disabled = true;
 
-    // 1. Encabezados EXACTOS según el formato de la imagen (19 columnas)
-    const headers = [
-        "N", "GGUU", "UNIDAD", "GRADO", "APELLIDOS Y NOMBRES", "DNI", "CIP", 
-        "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION", 
-        "PBA", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", 
-        "MOTIVO", "DIGITADOR"
-    ].join(SEPARATOR).toUpperCase();
+    fetch('/api/export-excel', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            // Agrega tu token de autenticación aquí si ya lo implementaste
+        },
+        // Enviamos los datos filtrados y listos al servidor
+        body: JSON.stringify(currentFilteredRecords) 
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(error => { throw new Error(error.message || 'Error desconocido del servidor.'); });
+        }
+        // El servidor devuelve el archivo como un blob binario
+        return response.blob(); 
+    })
+    .then(blob => {
+        // Crear la URL del objeto y simular la descarga
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
+        a.href = url;
+        a.download = `Reporte_SIMCEP_Mensual_${date}.xlsx`; // <-- Extension XLSX
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
 
-    let dataRows = [];
-    
-    currentFilteredRecords.forEach((record, index) => {
-        // Recalcular los valores clave
-        const { clasificacionMINSA, paClasificacion, riesgoAEnf } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
-        
-        // Determinar el nombre del Digitador según el rol
-        const adminRoleText = record.registradoPor && (record.registradoPor.includes('MD') || record.registradoPor.includes('DR')) ? 'MD, DR' : 'ADMIN';
-        const digitadorDisplay = record.registradoPor ? `${record.registradoPor.split('(')[0].trim()} (${adminRoleText})` : `${currentAdminFullName} (${adminRoleText})`;
-        
-        // Preparar la clasificación para la tabla
-        const paClasificacionDisplay = paClasificacion || record.paClasificacion || 'N/A';
-        const riesgoAEnfDisplay = riesgoAEnf || record.riesgoAEnf || 'N/A';
-        const clasificacionIMCDisplay = clasificacionMINSA || 'N/A';
-
-        // 2. Construir la fila de datos (separada por el nuevo SEPARATOR)
-        const row = [
-            index + 1, // N
-            record.gguu || 'N/A', // GGUU
-            record.unidad || 'N/A', // UNIDAD
-            record.grado || 'N/A', // GRADO
-            `${(record.apellido || 'N/A').toUpperCase()}, ${record.nombre || 'N/A'}`, // APELLIDOS Y NOMBRES
-            record.dni || 'N/A', // DNI
-            record.cip || 'N/A', // CIP
-            record.sexo || 'N/A', // SEXO
-            record.edad || 'N/A', // EDAD
-            record.peso || 'N/A', // PESO
-            record.altura || 'N/A', // TALLA (Altura)
-            record.pa || 'N/A', // PA
-            paClasificacionDisplay.toUpperCase(), // CLASIFICACION (de PA)
-            record.pab || 'N/A', // PBA
-            riesgoAEnfDisplay.toUpperCase(), // RIESGO A ENF SEGUN PABD
-            record.imc || 'N/A', // IMC
-            clasificacionIMCDisplay.toUpperCase(), // CLASIFICACION DE IMC (Clasificación MINSA)
-            '### NO ASISTIO', // MOTIVO (Dejamos ### como marcador si no hay dato)
-            digitadorDisplay // DIGITADOR (Nombre completo (ROL))
-        ].join(SEPARATOR);
-        
-        dataRows.push(row);
+        displayMessage('Exportación Exitosa', `Se ha generado el archivo .xlsx con formato.`, 'success');
+    })
+    .catch(error => {
+        console.error('Error en la descarga de Excel:', error);
+        displayMessage('Error de Exportación', `No se pudo generar el archivo: ${error.message}`, 'error');
+    })
+    .finally(() => {
+        // Restaurar el botón
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
     });
-
-    const csvContent = headers + '\n' + dataRows.join('\n');
-    
-    // Crear el Blob para la descarga
-    const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-    const filename = `Reporte_SIMCEP_Mensual_${date}.csv`; // CAMBIO A CSV
-    
-    // Usamos BOM (\uFEFF) y text/csv para mayor compatibilidad con Excel en español
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
-    const url = URL.createObjectURL(blob);
-    
-    // Simular el clic
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Excel.`, 'success');
 }
 
 
