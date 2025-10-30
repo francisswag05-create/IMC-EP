@@ -21,9 +21,10 @@ const dbPath = '/data/simcep';
 
 const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
     if (err) {
-        console.error("Error al conectar con la base de datos en el volumen:", err.message);
+        console.error("Error FATAL al conectar con la base de datos:", err.message);
+        process.exit(1); 
     } else {
-        console.log("Conexión a la base de datos SQLite en el volumen '/data' establecida con éxito.");
+        console.log("Conexión a la base de datos SQLite establecida con éxito.");
         db.exec(`
             CREATE TABLE IF NOT EXISTS users (
                 cip TEXT PRIMARY KEY,
@@ -43,13 +44,45 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 registradoPor TEXT, UNIQUE(cip, fecha)
             );
         `, (err) => {
-            if (err) console.error("Error al asegurar las tablas:", err.message);
+            if (err) {
+                console.error("Error al asegurar las tablas:", err.message);
+                process.exit(1);
+            }
+            console.log("Tablas de base de datos listas. El servidor está listo para iniciar.");
         });
     }
 });
 
 
 // --- 4. RUTAS DE LA API PARA REGISTROS ---
+
+// [GET] /api/patient/:dni (NUEVA RUTA para autocompletado)
+app.get('/api/patient/:dni', (req, res) => {
+    const { dni } = req.params;
+    // Busca el registro más reciente del paciente por DNI
+    const sql = "SELECT * FROM records WHERE dni = ? ORDER BY id DESC LIMIT 1";
+    db.get(sql, [dni], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ message: "Paciente no encontrado." });
+        
+        // Asumiendo que el CIP es el mismo que el usuario, busca en users
+        const userSql = "SELECT email, fullName, /* fechaNacimiento */ NULL as fechaNacimiento FROM users WHERE cip = ?";
+        db.get(userSql, [row.cip], (userErr, userRow) => {
+            const fechaNacimiento = userRow ? userRow.fechaNacimiento : null;
+            
+            res.json({
+                gguu: row.gguu,
+                unidad: row.unidad,
+                cip: row.cip,
+                sexo: row.sexo,
+                apellido: row.apellido,
+                nombre: row.nombre,
+                // Nota: fechaNacimiento es NULL hasta que se añada a la tabla users
+                fechaNacimiento: fechaNacimiento 
+            });
+        });
+    });
+});
 
 // [GET] /api/records
 app.get('/api/records', (req, res) => {
@@ -124,7 +157,6 @@ app.post('/api/export-excel', async (req, res) => {
         const BORDER_THIN = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         const FONT_RED = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFF0000' } }; // Rojo para INAPTO/Riesgo
         const FONT_NORMAL = { name: 'Calibri', size: 11 };
-        // Definimos un estilo estándar con fondo blanco para las celdas de datos
         const DATA_FILL_STANDARD = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }; 
 
         // --- 2. Encabezados (19 Columnas) ---
@@ -169,7 +201,6 @@ app.post('/api/export-excel', async (req, res) => {
                     }
                 } else {
                     // Para administradores normales: Mostrar solo Apellido y Nombre
-                    // Usamos los campos 'apellido' y 'nombre' que vienen en el record desde el cliente
                     const apellidoNombre = `${(record.apellido || '').toUpperCase()} ${record.nombre || ''}`.trim();
                     const nameParts = apellidoNombre.split(' ').filter(p => p.length > 0);
                     
@@ -402,6 +433,6 @@ app.post('/api/reset-password', (req, res) => {
 
 
 // --- 5. INICIAR EL SERVIDOR ---
-app.listen(PORT, () => {
-    console.log(`Servidor SIMCEP corriendo en http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor SIMCEP corriendo en http://0.0.0.0:${PORT}`);
 });
