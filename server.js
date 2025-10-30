@@ -185,7 +185,7 @@ app.post('/api/export-excel', async (req, res) => {
             const dataRow = worksheet.getRow(rowNumber);
             
             // Los campos que vienen calculados del cliente (sistema-imc.js)
-            const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase();
+            const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase(); // <-- VALOR DISPONIBLE
             const paClasificacion = (record.paClasificacion || 'N/A').toUpperCase();
             const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
             const resultado = (record.resultado || 'N/A').toUpperCase();
