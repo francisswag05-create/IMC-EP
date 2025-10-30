@@ -185,12 +185,12 @@ app.post('/api/export-excel', async (req, res) => {
             const dataRow = worksheet.getRow(rowNumber);
             
             // Los campos que vienen calculados del cliente (sistema-imc.js)
-            const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase(); // <-- VALOR DISPONIBLE
+            const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase();
             const paClasificacion = (record.paClasificacion || 'N/A').toUpperCase();
             const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
             const resultado = (record.resultado || 'N/A').toUpperCase();
             
-            // --- LÓGICA DE DIGITADOR SIMPLIFICADA ---
+            // --- LÓGICA DE DIGITADOR SIMPLIFICADA (CORRECCIÓN FINAL) ---
             let digitadorDisplay = record.registradoPor || '';
             if (digitadorDisplay) {
                 if (digitadorDisplay.includes('SUPERADMIN')) {
@@ -198,19 +198,21 @@ app.post('/api/export-excel', async (req, res) => {
                     const match = digitadorDisplay.match(/([^\s]+)\s+\(([^)]+)\)/);
                     if (match) {
                         digitadorDisplay = `${match[1]} (${match[2]})`; 
+                    } else {
+                        digitadorDisplay = 'SUPERADMIN';
                     }
                 } else {
-                    // Para administradores normales: Mostrar solo Apellido y Nombre
-                    const apellidoNombre = `${(record.apellido || '').toUpperCase()} ${record.nombre || ''}`.trim();
-                    const nameParts = apellidoNombre.split(' ').filter(p => p.length > 0);
+                    // Regla Admin Normal: Mostrar solo las dos primeras palabras del nombre del ADMINISTRADOR
+                    // 1. Quita el CIP y el rol entre paréntesis
+                    const adminFullName = digitadorDisplay.replace(/\s*\([^)]*\)/g, '').trim(); 
+                    // 2. Divide el nombre por espacios
+                    const adminNameParts = adminFullName.split(' ').filter(p => p.length > 0);
                     
-                    // Asume los dos primeros como los más importantes (Apellidos)
-                    if (nameParts.length >= 2) {
-                        digitadorDisplay = `${nameParts[0]} ${nameParts[1]}`.trim();
-                    } else if (nameParts.length === 1) {
-                         digitadorDisplay = nameParts[0];
+                    // 3. Toma las dos primeras palabras (que deberían ser el Apellido Apellido o Apellido Nombre)
+                    if (adminNameParts.length >= 2) {
+                        digitadorDisplay = `${adminNameParts[0]} ${adminNameParts[1]}`.trim();
                     } else {
-                        digitadorDisplay = record.cip; // Fallback al cip
+                        digitadorDisplay = adminNameParts.join(' ').trim() || record.cip; // Fallback
                     }
                 }
             }
@@ -235,7 +237,7 @@ app.post('/api/export-excel', async (req, res) => {
                 record.imc, // IMC
                 clasificacionIMC, // CLASIFICACION DE IMC <-- AHORA CORRECTO
                 record.motivo || 'N/A', // MOTIVO 
-                digitadorDisplay // DIGITADOR <-- SIMPLIFICADO
+                digitadorDisplay // DIGITADOR <-- SOLUCIÓN FINAL
             ];
             
             // Aplicar formato a la fila (Solución para styles.xml)
