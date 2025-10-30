@@ -233,6 +233,7 @@ function updateAdminTableHeaders() {
 
 // SIMPLIFICADA PARA SOLO APTO/INAPTO
 function getSimplifiedAptitudeStyle(resultado) {
+    // Ya que el resultado final solo será 'APTO' o 'INAPTO', esta función es simple.
     if (resultado.startsWith('INAPTO')) return 'bg-red-700 text-white';
     return 'bg-green-700 text-white'; 
 }
@@ -267,20 +268,15 @@ function getClassificacionPA(paString) {
 function getRiskByWaist(sexo, pab) {
     const pabFloat = parseFloat(pab);
     if (sexo === 'Masculino') {
-        // Riesgo Bajo: < 94
+        // Riesgo Bajo: < 94. Riesgo Alto: >= 94. Riesgo Muy Alto: >= 102
         if (pabFloat < 94) return 'RIESGO BAJO'; 
-        // Riesgo Alto: >= 94 y < 102 (implícito)
         if (pabFloat < 102) return 'RIESGO ALTO';
-        // Riesgo Muy Alto: >= 102
         return 'RIESGO MUY ALTO'; 
     } 
     
-    // Femenino:
-    // Riesgo Bajo: < 80
+    // Femenino: Riesgo Bajo: < 80. Riesgo Alto: >= 80. Riesgo Muy Alto: >= 88
     if (sexo === 'Femenino') {
-        // Riesgo Alto: >= 80 y < 88 (implícito)
         if (pabFloat < 80) return 'RIESGO BAJO';
-        // Riesgo Muy Alto: >= 88
         if (pabFloat < 88) return 'RIESGO ALTO'; 
         return 'RIESGO MUY ALTO';
     }
@@ -310,42 +306,47 @@ function getAptitude(imc, sexo, pab, paString) {
     
     // 4. Determinación de Aptitud (Regla Estándar de INAPTO - Simplificada)
     
+    let esAptoInicial = true;
+    let motivoInapto = "";
+
     // REGLA 1: INAPTO por IMC >= 30.0 (Obesidad I, II, III)
     if (imcFloat >= 30.0) {
-        resultado = "INAPTO (IMC Obesidad)";
-        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}.`;
+        esAptoInicial = false;
+        motivoInapto = "IMC Obesidad";
     } 
-    // REGLA 2: INAPTO por Riesgo Abdominal MUY ALTO (OMS: H >= 102, M >= 88)
-    else if (riesgoAEnf === 'RIESGO MUY ALTO') {
-        resultado = "INAPTO (Riesgo Abdominal Muy Alto)";
-        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}.`;
-    } 
-    // REGLA 3: INAPTO por PAB Alto (H >= 94, M >= 80) Y No Normal/Sobrepeso
-    // **Regla específica de tu último mensaje:** PAB >= 95 (H) o PAB >= 88 (M) es INAPTO
-    else if ((sexo === 'Masculino' && pabFloat >= 95) || (sexo === 'Femenino' && pabFloat >= 88)) {
-        resultado = "INAPTO (PAB Alto/Muy Alto)";
-        detalle = `Clasificación MINSA: ${clasificacionMINSA}. PAB Mayor a umbral de Aptitud.`;
+    // REGLA 2: INAPTO por PAB Alto/Muy Alto (H >= 94, M >= 80)
+    // ESTA REGLA DEFINE LA NO-APTO EN LA EVALUACIÓN ESTÁNDAR
+    else if ((sexo === 'Masculino' && pabFloat >= 94) || (sexo === 'Femenino' && pabFloat >= 80)) {
+        esAptoInicial = false;
+        motivoInapto = "Riesgo Abdominal Alto/Muy Alto";
     }
-    // REGLA 4: Si no fue INAPTO por las reglas de arriba, es APTO.
+    // REGLA 3: Si no fue INAPTO por las reglas de arriba, es APTO.
     else { 
-        // Ya no existe APTO (MONITOREO), todo lo que no es INAPTO es APTO.
-        resultado = "APTO";
-        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. PA: ${paClasificacion}. Aptitud confirmada.`;
+        // Clasificaciones como Sobrepeso (IMC 25-29.9) o Riesgo Bajo de PAB (H < 94, M < 80) caen aquí.
+        esAptoInicial = true;
     }
 
     // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (LA REGLA DEL PAB ANULADOR)
-    // Regla: Si el resultado fue INAPTO, PERO el PAB es <= 94 (H) o < 80 (M).
-    let umbralExcepcion;
-    if (sexo === 'Masculino') {
-        umbralExcepcion = 94.0; // Hombres <= 94 es APTO
-    } else { // Femenino
-        umbralExcepcion = 79.99; // Mujeres < 80 es APTO (para ser estricto con la tabla)
-    }
+    // Regla: Si el resultado inicial es INAPTO, PERO el PAB es estrictamente < 94 (H) o < 80 (M), se sobrescribe a APTO.
+    let aplicaExcepcion = false;
 
-    if (resultado.startsWith('INAPTO') && pabFloat <= umbralExcepcion) {
-        // La regla se cumple si el resultado inicial es INAPTO Y PAB es menor o igual al umbral.
+    if (sexo === 'Masculino' && pabFloat < 94) { // PAB < 94 -> APTO
+        aplicaExcepcion = true;
+    } else if (sexo === 'Femenino' && pabFloat < 80) { // PAB < 80 -> APTO
+        aplicaExcepcion = true;
+    }
+    
+    // DETERMINACIÓN FINAL DE APTITUD
+    if (aplicaExcepcion) {
         resultado = "APTO (EXCEPCIÓN PAB)";
-        detalle = `Resultado original INAPTO. Sobrescrito por Regla Médica: PAB <= ${umbralExcepcion} cm.`;
+        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Sobrescrito por Regla Médica: PAB < ${sexo === 'Masculino' ? '94' : '80'} cm.`;
+    } else if (esAptoInicial) {
+        resultado = "APTO";
+        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. PA: ${paClasificacion}. Aptitud confirmada.`;
+    } else {
+        // Es INAPTO
+        resultado = "INAPTO (" + motivoInapto + ")";
+        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Motivo: ${motivoInapto}. INAPTO.`;
     }
     
     // Si la PA no es NORMAL y el resultado es APTO, mantendremos el detalle informativo
@@ -353,8 +354,7 @@ function getAptitude(imc, sexo, pab, paString) {
         detalle += ` NOTA: Vigilancia por PA: ${paClasificacion}.`;
     }
 
-
-    // El resultado final para el filtro se simplifica (esto también afecta al Badge)
+    // El resultado final para el filtro se simplifica:
     const resultadoSimplificado = resultado.startsWith('APTO') ? 'APTO' : 'INAPTO';
 
     return { 
@@ -820,7 +820,7 @@ function exportToExcel() {
         a.remove();
         window.URL.revokeObjectURL(url);
 
-        displayMessage('Exportación Exitosa', `Se ha generado el archivo .xlsx con formato.`, 'success');
+        displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
     })
     .catch(error => {
         console.error('Error en la descarga de Excel:', error);
