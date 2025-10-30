@@ -94,7 +94,7 @@
             <div id="bmi-form-card" class="lg:col-span-2 card-tech">
                 <h2 class="text-2xl font-bold mb-6 flex items-center pb-3">
                     <i class="fas fa-ruler-vertical text-xl mr-3 text-color-primary-green"></i> CALCULADORA DE ÍNDICE DE MASA CORPORAL
-                </h2> <!-- CORREGIDO: Cierre correcto de h2 -->
+                </h2> 
 
                 <form id="bmi-form" class="space-y-6">
                     <!-- INICIO DEL CAMBIO: De 3 a 4 columnas con PAB -->
@@ -193,7 +193,7 @@
                         </div>
                     </div>
 
-                    <!-- Fila 2: GRADO, SEXO, EDAD, PA -->
+                    <!-- Fila 2: GRADO, SEXO, FECHA_NACIMIENTO (NUEVO), PA -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label for="input-role" class="label-tech">GRADO</label>
@@ -228,9 +228,10 @@
                                 <option value="Femenino">Femenino</option>
                             </select>
                         </div>
-                        <div>
-                            <label for="input-age-admin" class="label-tech">EDAD</label>
-                            <input type="number" id="input-age-admin" placeholder="Ej: 35" min="18" max="100" class="input-tech" required>
+                        <!-- NUEVO CAMPO: FECHA DE NACIMIENTO (DOB) -->
+                        <div> 
+                            <label for="input-dob" class="label-tech">FECHA DE NACIMIENTO</label>
+                            <input type="date" id="input-dob" class="input-tech" required> 
                         </div>
                         <div>
                             <label for="input-pa" class="label-tech">PA (Presión Arterial)</label>
@@ -238,7 +239,7 @@
                         </div>
                     </div>
 
-                    <!-- Fila 3: APELLIDOS, NOMBRES, PESO, ALTURA -->
+                    <!-- Fila 3: APELLIDOS, NOMBRES, EDAD (NUEVO), PESO, ALTURA -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label for="input-lastname" class="label-tech">APELLIDOS</label>
@@ -249,24 +250,27 @@
                             <input type="text" id="input-firstname" placeholder="Ej: Marco Antonio" class="input-tech" required>
                         </div>
                         <div>
+                            <label for="input-age-admin" class="label-tech">EDAD (Autocompletado)</label>
+                            <input type="number" id="input-age-admin" placeholder="Ej: 35" min="18" max="100" class="input-tech" required>
+                        </div>
+                        <div>
                             <label for="input-weight-admin" class="label-tech">PESO (kg)</label>
                             <input type="number" id="input-weight-admin" placeholder="Ej: 75.5" min="20" step="0.1" required class="input-tech">
                         </div>
-                        <div>
+                    </div>
+                    
+                    <!-- Fila 4: PAB (Perímetro Abdominal), Altura -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                         <div>
                             <label for="input-height-admin" class="label-tech">ALTURA (metros)</label>
                             <input type="number" id="input-height-admin" placeholder="Ej: 1.75" min="0.5" step="0.01" required class="input-tech">
                         </div>
-                    </div>
-                    
-                    <!-- Fila 4: PAB (Perímetro Abdominal) - CORREGIDO de PBA a PAB -->
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label for="input-pab" class="label-tech">PAB (Perím. Abdom. cm)</label>
                             <input type="number" id="input-pab" placeholder="Ej: 95" min="30" step="0.1" required class="input-tech">
                         </div>
                         <!-- Espacios vacíos para mantener la columna -->
                         <div></div> 
-                        <div></div>
                         <div></div> 
                     </div>
                     
