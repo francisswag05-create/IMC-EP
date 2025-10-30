@@ -844,7 +844,6 @@ function exportToWord() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1024,6 +1023,7 @@ document.getElementById('add-user-form').addEventListener('submit', handleAddUse
 
 // NUEVO LISTENER: Buscar al paciente cuando se escriba el DNI
 document.getElementById('input-dni').addEventListener('input', handleDNIInput);
+document.getElementById('input-userid').addEventListener('input', handleCIPInput);
 
 document.addEventListener('DOMContentLoaded', () => {
     updateUI();
