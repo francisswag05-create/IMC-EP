@@ -214,7 +214,7 @@ async function updateUI() {
 function updateAdminTableHeaders() {
     const tableHeaderRow = document.querySelector('#admin-dashboard-view thead tr');
     if (tableHeaderRow) {
-        // ACTUALIZADO CON NUEVAS COLUMNAS (P.A. y PAB)
+        // AJUSTADO A 12 COLUMNAS (AÑADIDA CLASIFICACIÓN IMC)
         tableHeaderRow.innerHTML = `
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">CIP</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">GRADO</th>
@@ -224,7 +224,8 @@ function updateAdminTableHeaders() {
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">PESO/ALTURA</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">EDAD</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">IMC</th>
-            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">RESULTADO</th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">CLASIFICACIÓN IMC</th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">APTITUD</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">FECHA</th>
             <th class="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-color-accent-lime">ACCIÓN</th>
         `;
@@ -337,7 +338,7 @@ function getAptitude(imc, sexo, pab, paString) {
     }
     
     // DETERMINACIÓN FINAL DE APTITUD
-    if (aplicaExcepcion) {
+    if (aplicaExcepcion && !esAptoInicial) { // Solo aplica si es INAPTO y cumple la excepción
         resultado = "APTO (EXCEPCIÓN PAB)";
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Sobrescrito por Regla Médica: PAB < ${sexo === 'Masculino' ? '94' : '80'} cm.`;
     } else if (esAptoInicial) {
@@ -459,8 +460,8 @@ async function fetchAndDisplayRecords() {
         console.error("Error fetching records:", error);
         displayMessage('Error de Conexión', 'No se pudieron cargar los registros. Asegúrese de que el servidor esté funcionando.', 'error');
         const tableBody = document.getElementById('admin-table-body');
-        // COLSPAN_VALUE AUMENTADO A 11
-        tableBody.innerHTML = `<tr><td colspan="11" class="text-center py-10">Error al cargar datos. Verifique la consola.</td></tr>`;
+        // COLSPAN_VALUE AJUSTADO
+        tableBody.innerHTML = `<tr><td colspan="12" class="text-center py-10">Error al cargar datos. Verifique la consola.</td></tr>`;
     }
 }
 
@@ -667,8 +668,8 @@ function filterTable() {
 function renderTable(records) {
     const tableBody = document.getElementById('admin-table-body');
     tableBody.innerHTML = '';
-    // COLSPAN_VALUE AUMENTADO DE 10 A 11
-    const COLSPAN_VALUE = 11; 
+    // COLSPAN_VALUE AJUSTADO A 12
+    const COLSPAN_VALUE = 12; 
     if (!isAuthenticated) {
         tableBody.innerHTML = `<tr><td colspan="${COLSPAN_VALUE}" class="text-center py-4">No está autenticado.</td></tr>`;
         return;
@@ -679,7 +680,7 @@ function renderTable(records) {
     }
     records.forEach(data => {
         // LLAMADA ACTUALIZADA PARA OBTENER TODAS LAS CLASIFICACIONES
-        const { resultado, paClasificacion, riesgoAEnf } = getAptitude(data.imc, data.sexo, data.pab, data.pa);
+        const { resultado, paClasificacion, riesgoAEnf, clasificacionMINSA } = getAptitude(data.imc, data.sexo, data.pab, data.pa);
         
         // Uso de la función simplificada para el estilo del badge
         const badgeClass = getSimplifiedAptitudeStyle(resultado); 
@@ -711,6 +712,9 @@ function renderTable(records) {
             <td class="px-4 py-3 whitespace-nowrap text-sm">${data.peso || 'N/A'} kg / ${data.altura || 'N/A'} m</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-gold">${data.edad || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.startsWith('INAPTO') ? 'text-red-500' : 'text-color-accent-gold'}">${data.imc || 'N/A'}</td>
+            
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${clasificacionMINSA.toUpperCase()}</td> <!-- NUEVA COLUMNA DE CLASIFICACION IMC -->
+            
             <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-center">${actionButtons}</td>
@@ -728,9 +732,9 @@ function exportToWord() {
         return;
     }
     
-    // --- ESTILOS OPTIMIZADOS PARA WORD ---
-    const tableHeaderStyle = "background-color: #2F4F4F; color: white; padding: 6px; text-align: center; font-size: 11px; border: 1px solid #111; font-weight: bold; border-collapse: collapse; white-space: nowrap; font-family: 'Arial', sans-serif;";
-    const cellStyle = "padding: 6px; text-align: center; font-size: 11px; border: 1px solid #ccc; vertical-align: middle; border-collapse: collapse; font-family: 'Arial', sans-serif;";
+    // --- ESTILOS OPTIMIZADOS PARA WORD (MÁS COMPACTOS) ---
+    const tableHeaderStyle = "background-color: #2F4F4F; color: white; padding: 4px; text-align: center; font-size: 10px; border: 1px solid #111; font-weight: bold; border-collapse: collapse; white-space: nowrap; font-family: 'Arial', sans-serif;";
+    const cellStyle = "padding: 4px; text-align: center; font-size: 10px; border: 1px solid #ccc; vertical-align: middle; border-collapse: collapse; font-family: 'Arial', sans-serif;";
     const inaptoTextStyle = 'style="color: #991b1b; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"'; // Rojo oscuro
     const aptoTextStyle = 'style="color: #065f46; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"'; // Verde oscuro
     const titleStyle = "text-align: center; color: #1e3a8a; font-size: 20px; margin-bottom: 5px; font-weight: bold; font-family: 'Arial', sans-serif;";
