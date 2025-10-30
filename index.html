@@ -94,7 +94,7 @@
             <div id="bmi-form-card" class="lg:col-span-2 card-tech">
                 <h2 class="text-2xl font-bold mb-6 flex items-center pb-3">
                     <i class="fas fa-ruler-vertical text-xl mr-3 text-color-primary-green"></i> CALCULADORA DE ÍNDICE DE MASA CORPORAL
-                </h2>
+                </label>
 
                 <form id="bmi-form" class="space-y-6">
                     <!-- INICIO DEL CAMBIO: De 3 a 4 columnas con PAB -->
@@ -117,7 +117,7 @@
                             <input type="number" id="input-height" value="1.75" placeholder="Ej: 1.75" min="0.5" step="0.01" required class="input-tech">
                         </div>
 
-                        <!-- NUEVO CAMPO: Perímetro Abdominal -->
+                        <!-- CAMPO: Perímetro Abdominal -->
                         <div>
                             <label for="input-pab-public" class="label-tech">PAB (cm)</label>
                             <input type="number" id="input-pab-public" value="95" placeholder="Ej: 95" min="30" step="0.1" required class="input-tech">
@@ -258,10 +258,10 @@
                         </div>
                     </div>
                     
-                    <!-- Fila 4: PBA (Perímetro Abdominal) -->
+                    <!-- Fila 4: PAB (Perímetro Abdominal) - CORREGIDO de PBA a PAB -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
-                            <label for="input-pab" class="label-tech">PBA (Perím. Abdom. cm)</label>
+                            <label for="input-pab" class="label-tech">PAB (Perím. Abdom. cm)</label>
                             <input type="number" id="input-pab" placeholder="Ej: 95" min="30" step="0.1" required class="input-tech">
                         </div>
                         <!-- Espacios vacíos para mantener la columna -->
@@ -315,17 +315,16 @@
                     <input type="number" id="age-filter" placeholder="Ej: 45" min="18" max="100" class="input-tech text-sm w-24">
                 </div>
                 
-                <!-- NUEVO CAMPO: Filtrar por Aptitud (Añadido) -->
+                <!-- Filtro por Aptitud (Eliminada opción 'APTO (MONITOREO)') -->
                 <div>
                     <label for="aptitude-filter" class="label-tech inline-block mb-1">Filtrar por Aptitud:</label>
                     <select id="aptitude-filter" class="input-tech text-sm w-48">
                         <option value="">Todas las Aptitudes</option>
                         <option value="APTO">APTO</option>
                         <option value="INAPTO">INAPTO</option>
-                        <option value="MONITOREO">APTO (MONITOREO)</option>
                     </select>
                 </div>
-                <!-- FIN NUEVO CAMPO -->
+                <!-- FIN Filtro por Aptitud -->
                 
                 <!-- INPUT MES DE REPORTE AÑADIDO AQUÍ -->
                 <div class="min-w-[150px]">
