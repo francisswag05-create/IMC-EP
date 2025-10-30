@@ -41,7 +41,9 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 sexo TEXT, cip TEXT, grado TEXT, apellido TEXT,
                 nombre TEXT, edad INTEGER, peso REAL, altura REAL, 
                 imc REAL, fecha TEXT,
-                registradoPor TEXT
+                registradoPor TEXT,
+                motivo TEXT,               -- <<-- CAMBIO 1: AÑADIDO MOTIVO INAPTO
+                dob TEXT                   -- <<-- CAMBIO 2: AÑADIDO FECHA DE NACIMIENTO (DOB)
             );
         `, (err) => {
             if (err) {
@@ -56,16 +58,16 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 // --- 4. RUTAS DE LA API PARA REGISTROS ---
 
-// [GET] /api/patient/:dni (MODIFICADA para autocompletado)
+// [GET] /api/patient/:dni (MODIFICADA: Autocompleta Grado y DOB)
 app.get('/api/patient/:dni', (req, res) => {
     const { dni } = req.params;
-    // Busca el registro más reciente del paciente por DNI
+    // Busca el registro más reciente del paciente por DNI o CIP
     const sql = "SELECT * FROM records WHERE dni = ? OR cip = ? ORDER BY id DESC LIMIT 1";
     db.get(sql, [dni, dni], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ message: "Paciente no encontrado." });
         
-        // Simplemente devolvemos todos los campos que necesitamos para autocompletar
+        // Devolvemos todos los campos necesarios para autocompletar
         res.json({
             gguu: row.gguu,
             unidad: row.unidad,
@@ -74,7 +76,8 @@ app.get('/api/patient/:dni', (req, res) => {
             apellido: row.apellido,
             nombre: row.nombre,
             edad: row.edad, 
-            fechaNacimiento: null 
+            fechaNacimiento: row.dob, // <<-- CORREGIDO: Usar row.dob (Fecha de Nacimiento)
+            grado: row.grado          // <<-- AÑADIDO: Devolver el Grado
         });
     });
 });
@@ -88,37 +91,36 @@ app.get('/api/records', (req, res) => {
     });
 });
 
-// [POST] /api/records
+// [POST] /api/records (MODIFICADA: incluye Motivo y DOB)
 app.post('/api/records', (req, res) => {
-    // CAPTURA DE TODOS LOS CAMPOS
-    const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor } = req.body;
+    // CAPTURA DE TODOS LOS CAMPOS (Ahora son 20)
+    const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob } = req.body;
     
-    // SQL con todos los 18 campos para inserción
-    const sql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    // SQL con todos los 20 campos para inserción
+    const sql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
-    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor], function(err) {
+    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob], function(err) {
         if (err) {
-            // Se quitó la restricción UNIQUE, pero aún manejamos errores genéricos
             return res.status(500).json({ error: err.message });
         }
         res.status(201).json({ message: "Registro guardado exitosamente", id: this.lastID });
     });
 });
 
-// [PUT] /api/records/:id
+// [PUT] /api/records/:id (MODIFICADA: incluye Motivo y DOB)
 app.put('/api/records/:id', (req, res) => {
     const { id } = req.params;
-    // CAPTURA DE TODOS LOS CAMPOS
-    const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc } = req.body;
+    // CAPTURA DE TODOS LOS CAMPOS (Ahora incluye motivo y dob)
+    const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob } = req.body;
     
-    // SQL con todos los 15 campos para actualización
+    // SQL con todos los 17 campos para actualización
     const sql = `UPDATE records SET 
                     gguu = ?, unidad = ?, dni = ?, pa = ?, pab = ?, paClasificacion = ?, riesgoAEnf = ?,
                     sexo = ?, cip = ?, grado = ?, apellido = ?, nombre = ?, 
-                    edad = ?, peso = ?, altura = ?, imc = ?
+                    edad = ?, peso = ?, altura = ?, imc = ?, motivo = ?, dob = ?
                  WHERE id = ?`;
                  
-    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, id], function(err) {
+    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob, id], function(err) {
         if (err) return res.status(500).json({ message: "Error al actualizar.", error: err.message });
         if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
         res.json({ message: "Registro actualizado." });
@@ -137,7 +139,7 @@ app.delete('/api/records/:id', (req, res) => {
 });
 
 
-// [POST] /api/export-excel
+// [POST] /api/export-excel (CORREGIDA: usa record.motivo para el Excel)
 app.post('/api/export-excel', async (req, res) => {
     try {
         // RECIBIMOS EL OBJETO CON RECORDS Y REPORTMONTH
@@ -224,9 +226,9 @@ app.post('/api/export-excel', async (req, res) => {
                 record.pab, // PBA
                 riesgoAEnf, // RIESGO A ENF SEGUN PABD
                 record.imc, // IMC
-                clasificacionIMC, // CLASIFICACION DE IMC <-- AHORA CORRECTO
-                record.motivo || 'N/A', // MOTIVO 
-                digitadorDisplay // DIGITADOR <-- SOLUCIÓN FINAL
+                clasificacionIMC, // CLASIFICACION DE IMC
+                record.motivo || 'N/A', // MOTIVO <<-- USAR record.motivo
+                digitadorDisplay // DIGITADOR
             ];
             
             // Aplicar formato a la fila (Solución para styles.xml)
