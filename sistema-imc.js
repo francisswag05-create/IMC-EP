@@ -263,31 +263,32 @@ function getClassificacionPA(paString) {
 }
 
 
-// --- Función getRiskByWaist (RIESGO A ENF SEGUN PABD) ---
+// --- Función getRiskByWaist (RIESGO A ENF SEGUN PABD - AJUSTADO A TABLAS OMS) ---
 function getRiskByWaist(sexo, pab) {
     const pabFloat = parseFloat(pab);
     if (sexo === 'Masculino') {
-        if (pabFloat < 94) return 'RIESGO BAJO';
-        if (pabFloat < 102) return 'RIESGO ALTO';
+        // Normal: 94 o menos (<= 94). Riesgo Alto: 95-102 (> 94 y <= 102). Riesgo Muy Alto: Más de 102 (> 102).
+        if (pabFloat <= 94) return 'RIESGO BAJO'; 
+        if (pabFloat <= 102) return 'RIESGO ALTO';
         return 'RIESGO MUY ALTO'; 
     } 
-    // Asumiendo Femenino
+    // Femenino: Normal: 80 o menos (<= 80). Riesgo Alto: 81-88 (> 80 y <= 88). Riesgo Muy Alto: Más de 88 (> 88).
     if (sexo === 'Femenino') {
-        if (pabFloat < 80) return 'RIESGO BAJO';
-        if (pabFloat < 88) return 'RIESGO ALTO';
+        if (pabFloat <= 80) return 'RIESGO BAJO';
+        if (pabFloat <= 88) return 'RIESGO ALTO';
         return 'RIESGO MUY ALTO';
     }
     return 'INDETERMINADO'; 
 }
 
 
-// --- Función getAptitude (MODIFICADA para incluir PAB y PA y REGLA DE EXCEPCIÓN) ---
+// --- Función getAptitude (CON REGLA DE EXCEPCIÓN FINAL: PAB <= 94 ANULA INAPTO) ---
 function getAptitude(imc, sexo, pab, paString) {
     const imcFloat = parseFloat(imc);
-    const pabFloat = parseFloat(pab); // <--- Mover pabFloat aquí para usarlo en la excepción
+    const pabFloat = parseFloat(pab); 
     let clasificacionMINSA, resultado, detalle;
     
-    // 1. Clasificación MINSA (Clasificación de IMC)
+    // 1. Clasificación MINSA (Clasificación de IMC - FIEL A LA TABLA OMS)
     if (imcFloat < 18.5) clasificacionMINSA = "BAJO PESO";
     else if (imcFloat <= 24.9) clasificacionMINSA = "NORMAL";
     else if (imcFloat <= 29.9) clasificacionMINSA = "SOBREPESO";
@@ -301,9 +302,10 @@ function getAptitude(imc, sexo, pab, paString) {
     // 3. Clasificación de Presión Arterial (CLASIFICACION)
     const paClasificacion = getClassificacionPA(paString);
     
-    // 4. Determinación de Aptitud (Regla Combinada)
+    // 4. Determinación de Aptitud (Regla Combinada - Estándar)
     
     // INAPTO por Obesidad Extrema o Riesgo Abdominal Muy Alto
+    // Usamos imcFloat >= 30.0 para incluir Obesidad I, II y III 
     if (imcFloat >= 30.0) {
         resultado = "INAPTO (Obesidad)";
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. INAPTO.`;
@@ -322,14 +324,13 @@ function getAptitude(imc, sexo, pab, paString) {
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. PA: ${paClasificacion}. Aptitud confirmada.`;
     }
 
-    // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (PAB < 94) <--- Regla final y más importante
-    if (resultado.startsWith('INAPTO') && pabFloat < 94) {
-        // Esta regla sobrescribe el resultado INAPTO, convirtiéndolo en APTO.
+    // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (PAB <= 94 anula INAPTO)
+    if (resultado.startsWith('INAPTO') && pabFloat <= 94) {
+        // La regla se cumple si el resultado inicial es INAPTO Y PAB es 94.0 o menos.
         resultado = "APTO (EXCEPCIÓN PAB)";
-        detalle = `Resultado original: ${clasificacionMINSA}. Sobrescrito por Regla Médica: PAB < 94, se considera APTO.`;
+        detalle = `Resultado original: ${clasificacionMINSA}. Sobrescrito por Regla Médica: PAB <= 94, se considera APTO.`;
     }
     
-    // Devolver todos los resultados necesarios
     return { resultado, detalle, clasificacionMINSA, paClasificacion, riesgoAEnf };
 }
 
