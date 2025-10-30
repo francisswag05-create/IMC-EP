@@ -337,11 +337,18 @@ function getAptitude(imc, sexo, pab, paString) {
     // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (LA REGLA DEL PAB ANULADOR)
     // Regla: Si el resultado inicial es INAPTO, PERO el PAB es estrictamente < 94 (H) o < 80 (M), se sobrescribe a APTO.
     let aplicaExcepcion = false;
+    let umbralExcepcion;
 
-    if (sexo === 'Masculino' && pabFloat < 94) { // PAB < 94 -> APTO
-        aplicaExcepcion = true;
-    } else if (sexo === 'Femenino' && pabFloat < 80) { // PAB < 80 -> APTO
-        aplicaExcepcion = true;
+    if (sexo === 'Masculino') {
+        umbralExcepcion = 94;
+        if (pabFloat < 94) { // PAB < 94 -> APTO
+            aplicaExcepcion = true;
+        }
+    } else { // Femenino
+        umbralExcepcion = 80;
+        if (pabFloat < 80) { // PAB < 80 -> APTO
+            aplicaExcepcion = true;
+        }
     }
     
     // DETERMINACIÓN FINAL DE APTITUD
@@ -592,8 +599,6 @@ async function updateRecord(id, recordData) {
 }
 
 
-// --- 6. Lógica de la Tabla de Registros (Filtros, Renderizado, Exportación) ---
-
 function populateMonthFilter() {
     const filterSelect = document.getElementById('month-filter');
     const monthCounts = allRecordsFromDB.reduce((acc, record) => {
@@ -620,6 +625,8 @@ function populateMonthFilter() {
     const defaultOption = filterSelect.querySelector('option[value=""]');
     defaultOption.textContent = `Todos los Meses (${allRecordsFromDB.length} Registros)`;
 }
+
+// --- 6. Lógica de la Tabla de Registros (Filtros, Renderizado, Exportación) ---
 
 function filterTable() {
     const nameSearchTerm = document.getElementById('name-filter').value.toLowerCase().trim();
