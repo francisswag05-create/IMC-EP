@@ -214,13 +214,13 @@ async function updateUI() {
 function updateAdminTableHeaders() {
     const tableHeaderRow = document.querySelector('#admin-dashboard-view thead tr');
     if (tableHeaderRow) {
-        // ACTUALIZADO CON NUEVAS COLUMNAS (P.A. y PBA)
+        // ACTUALIZADO CON NUEVAS COLUMNAS (P.A. y PAB)
         tableHeaderRow.innerHTML = `
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">CIP</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">GRADO</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">APELLIDO/NOMBRE</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">PA / CLASIFICACION</th>
-            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">PBA / RIESGO</th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">PAB / RIESGO</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">PESO/ALTURA</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">EDAD</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">IMC</th>
@@ -264,7 +264,7 @@ function getClassificacionPA(paString) {
 }
 
 
-// --- Función getRiskByWaist (RIESGO A ENF SEGUN PABD - AJUSTADO A CUADRO 2 OMS) ---
+// --- Función getRiskByWaist (RIESGO A ENF SEGUN PAB - AJUSTADO A CUADRO 2 OMS) ---
 function getRiskByWaist(sexo, pab) {
     const pabFloat = parseFloat(pab);
     if (sexo === 'Masculino') {
@@ -322,7 +322,7 @@ function getAptitude(imc, sexo, pab, paString) {
     }
     // REGLA 3: Si no fue INAPTO por las reglas de arriba, es APTO.
     else { 
-        // Clasificaciones como Sobrepeso (IMC 25-29.9) o Riesgo Bajo de PAB (H < 94, M < 80) caen aquí.
+        // Clasificaciones como Sobrepeso (IMC 25-29.9) caen aquí.
         esAptoInicial = true;
     }
 
@@ -727,37 +727,70 @@ function exportToWord() {
         displayMessage('Sin Datos', 'No hay registros para exportar.', 'warning');
         return;
     }
-    const tableHeaderStyle = "background-color: #333; color: white; padding: 3px; text-align: center; font-size: 10px; border: 1px solid #333; font-weight: bold; border-collapse: collapse; white-space: nowrap; font-family: 'Arial', sans-serif;";
-    const cellStyle = "padding: 3px; text-align: center; font-size: 10px; border: 1px solid #ccc; vertical-align: middle; border-collapse: collapse; font-family: 'Arial', sans-serif;";
-    const inaptoTextStyle = 'style="color: #991b1b; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"';
-    const aptoTextStyle = 'style="color: #065f46; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"';
-    const titleStyle = "text-align: center; color: #1e3a8a; font-size: 18px; margin-bottom: 5px; font-weight: bold; font-family: 'Arial', sans-serif;";
-    const subtitleStyle = "text-align: center; font-size: 12px; margin-bottom: 20px; font-family: 'Arial', sans-serif;";
+    
+    // --- ESTILOS OPTIMIZADOS PARA WORD ---
+    const tableHeaderStyle = "background-color: #2F4F4F; color: white; padding: 6px; text-align: center; font-size: 11px; border: 1px solid #111; font-weight: bold; border-collapse: collapse; white-space: nowrap; font-family: 'Arial', sans-serif;";
+    const cellStyle = "padding: 6px; text-align: center; font-size: 11px; border: 1px solid #ccc; vertical-align: middle; border-collapse: collapse; font-family: 'Arial', sans-serif;";
+    const inaptoTextStyle = 'style="color: #991b1b; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"'; // Rojo oscuro
+    const aptoTextStyle = 'style="color: #065f46; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"'; // Verde oscuro
+    const titleStyle = "text-align: center; color: #1e3a8a; font-size: 20px; margin-bottom: 5px; font-weight: bold; font-family: 'Arial', sans-serif;";
+    const subtitleStyle = "text-align: center; font-size: 14px; margin-bottom: 20px; font-family: 'Arial', sans-serif;";
     const reportDate = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
     
-    // ENCABEZADOS DE WORD (Actualizado para mostrar más datos clínicos)
-    let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP</title><style>body { font-family: Arial, sans-serif; } table { border-collapse: collapse; width: 95%; margin: 20px auto; } td, th { border-collapse: collapse; }</style></head><body><div style="text-align: center; width: 100%;"><h1 style="${titleStyle}">REPORTE DE ÍNDICE DE MASA CORPORAL (SIMCEP)</h1><p style="${subtitleStyle}">Fecha: ${reportDate} | Registros Filtrados: ${currentFilteredRecords.length}</p></div><table border="1"><thead><tr><th style="${tableHeaderStyle}; width: 10%;">GRADO</th><th style="${tableHeaderStyle}; width: 25%;">APELLIDO, NOMBRE</th><th style="${tableHeaderStyle}; width: 10%;">PBA (cm)</th><th style="${tableHeaderStyle}; width: 10%;">RIESGO ABD.</th><th style="${tableHeaderStyle}; width: 10%;">PA</th><th style="${tableHeaderStyle}; width: 10%;">IMC</th><th style="${tableHeaderStyle}; width: 15%;">RESULTADO</th><th style="${tableHeaderStyle}; width: 10%;">FECHA</th></tr></thead><tbody>`;
+    // --- GENERACIÓN DE CONTENIDO HTML OPTIMIZADO ---
+    let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP</title><style>body { font-family: Arial, sans-serif; } table { border-collapse: collapse; width: 100%; margin: 20px auto; } td, th { border-collapse: collapse; }</style></head><body>`;
     
+    // CABECERA
+    htmlContent += `<div style="text-align: center; width: 100%;">
+        <h1 style="${titleStyle}">REPORTE DE ÍNDICE DE MASA CORPORAL (SIMCEP)</h1>
+        <p style="${subtitleStyle}">Fecha de Generación: ${reportDate} | Registros Filtrados: ${currentFilteredRecords.length}</p>
+    </div>`;
+
+    // INICIO DE LA TABLA
+    htmlContent += `<table border="1" style="width: 100%;"><thead><tr>
+        <th style="${tableHeaderStyle}; width: 10%;">UNIDAD</th>
+        <th style="${tableHeaderStyle}; width: 10%;">GRADO</th>
+        <th style="${tableHeaderStyle}; width: 25%;">APELLIDOS Y NOMBRES</th>
+        <th style="${tableHeaderStyle}; width: 8%;">EDAD</th>
+        <th style="${tableHeaderStyle}; width: 8%;">PESO (kg)</th>
+        <th style="${tableHeaderStyle}; width: 8%;">TALLA (m)</th>
+        <th style="${tableHeaderStyle}; width: 8%;">IMC</th>
+        <th style="${tableHeaderStyle}; width: 23%;">CLASIFICACIÓN</th>
+    </tr></thead><tbody>`;
+    
+    // FILAS DE DATOS
     currentFilteredRecords.forEach(record => {
-        const { resultado, riesgoAEnf, paClasificacion } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
+        // Obtenemos el resultado completo para el detalle y la clasificación MINSA
+        const { resultado, clasificacionMINSA } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
         const textStyleTag = resultado.startsWith('INAPTO') ? inaptoTextStyle : aptoTextStyle;
         const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
-        const riesgoAbdominalColor = riesgoAEnf.includes('MUY ALTO') ? 'style="color: #991b1b; font-weight: bold;"' : '';
+        
+        // La clasificación debe mostrar el estado MINSA + (Resultado Simplificado)
+        let clasificacionDisplay = `${clasificacionMINSA.toUpperCase()} (${resultado})`;
         
         htmlContent += `<tr>
+            <td style="${cellStyle}">${record.unidad || 'N/A'}</td>
             <td style="${cellStyle}">${record.grado || 'N/A'}</td>
             <td style="${nameCellStyle}">${(record.apellido || 'N/A').toUpperCase()}, ${record.nombre || 'N/A'}</td>
-            <td style="${cellStyle}">${record.pab || 'N/A'}</td>
-            <td style="${cellStyle}" ${riesgoAbdominalColor}>${riesgoAEnf || 'N/A'}</td>
-            <td style="${cellStyle}">${record.pa || 'N/A'} (${paClasificacion || 'N/A'})</td>
+            <td style="${cellStyle}">${record.edad || 'N/A'}</td>
+            <td style="${cellStyle}">${record.peso || 'N/A'}</td>
+            <td style="${cellStyle}">${record.altura || 'N/A'}</td>
             <td style="${cellStyle} font-weight: bold;">${record.imc || 'N/A'}</td>
-            <td style="${cellStyle}" ${textStyleTag}>${resultado}</td>
-            <td style="${cellStyle}">${record.fecha || 'N/A'}</td>
+            <td style="${cellStyle}" ${textStyleTag}>${clasificacionDisplay}</td>
         </tr>`;
     });
     
-    htmlContent += `</tbody></table><div style="margin: 40px auto 0 auto; width: 95%; text-align: center; border: none; font-family: 'Arial', sans-serif;"><h4 style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #1e3a8a;">LEYES DE CLASIFICACIÓN CLÍNICA (SIMCEP)</h4><p style="font-size: 10px; margin: 5px 0; text-align: left; padding-left: 10%;">*La aptitud INAPTO se define por un IMC ≥ 30.0 o un riesgo de enfermedad abdominal MUY ALTO (OMS).</p></div></body></html>`;
+    // CIERRE DE LA TABLA Y PIE DE PÁGINA
+    htmlContent += `</tbody></table>
+    <div style="margin: 40px auto 0 auto; width: 95%; text-align: center; border: none; font-family: 'Arial', sans-serif;">
+        <h4 style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #1e3a8a;">LEYES DE CLASIFICACIÓN CLÍNICA (SIMCEP)</h4>
+        <p style="font-size: 10px; margin: 5px 0; text-align: left; padding-left: 10%;">
+            *La Aptitud se rige por el IMC y el Perímetro Abdominal (PAB) según directrices de la OMS/Internas. 
+            El INAPTO es anulado a APTO si el PAB cae en el rango de excepción.
+        </p>
+    </div></body></html>`;
 
+    // --- LÓGICA DE DESCARGA ---
     const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
     const filename = `Reporte_SIMCEP_IMC_Word_${date}.doc`;
     const blob = new Blob([htmlContent], { type: 'application/msword' });
@@ -820,7 +853,7 @@ function exportToExcel() {
         a.remove();
         window.URL.revokeObjectURL(url);
 
-        displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
+        displayMessage('Exportación Exitosa', `Se ha generado el archivo .xlsx con formato.`, 'success');
     })
     .catch(error => {
         console.error('Error en la descarga de Excel:', error);
@@ -921,7 +954,7 @@ document.getElementById('admin-record-form').addEventListener('submit', function
             saveRecord(newRecord);
         }
     } else {
-        displayMessage('Error de Entrada', 'Por favor, complete todos los campos obligatorios y revise valores numéricos (Peso, Altura, PBA).', 'error');
+        displayMessage('Error de Entrada', 'Por favor, complete todos los campos obligatorios y revise valores numéricos (Peso, Altura, PAB).', 'error');
         document.getElementById('admin-result-box').classList.add('hidden');
     }
 });
