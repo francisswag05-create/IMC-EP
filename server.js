@@ -6,7 +6,7 @@ const path = require('path');
 const cors = require('cors'); 
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const ExcelJS = require('exceljs'); // <--- IMPORTACIÓN DE EXCELJS
+const ExcelJS = require('exceljs'); 
 
 const app = express();
 const PORT = process.env.PORT || 3000; 
