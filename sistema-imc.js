@@ -1026,5 +1026,6 @@ document.getElementById('add-user-form').addEventListener('submit', handleAddUse
 document.getElementById('input-dni').addEventListener('input', handleDNIInput);
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Inicializa la UI y establece los Event Listeners después de que el DOM esté listo.
     updateUI();
 });

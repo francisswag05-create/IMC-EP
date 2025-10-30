@@ -41,7 +41,8 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 sexo TEXT, cip TEXT, grado TEXT, apellido TEXT,
                 nombre TEXT, edad INTEGER, peso REAL, altura REAL, 
                 imc REAL, fecha TEXT,
-                registradoPor TEXT, UNIQUE(cip, fecha)
+                registradoPor TEXT
+                -- Se eliminó la restricción UNIQUE(cip, fecha) para permitir múltiples registros por día
             );
         `, (err) => {
             if (err) {
@@ -103,7 +104,7 @@ app.post('/api/records', (req, res) => {
     
     db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor], function(err) {
         if (err) {
-            if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ message: `El CIP ${cip} ya tiene un registro en la fecha ${fecha}.` });
+            // Se quitó la restricción UNIQUE, pero aún manejamos errores genéricos
             return res.status(500).json({ error: err.message });
         }
         res.status(201).json({ message: "Registro guardado exitosamente", id: this.lastID });
@@ -193,26 +194,20 @@ app.post('/api/export-excel', async (req, res) => {
             // --- LÓGICA DE DIGITADOR SIMPLIFICADA (CORRECCIÓN FINAL) ---
             let digitadorDisplay = record.registradoPor || '';
             if (digitadorDisplay) {
+                // 1. Quita el CIP y el rol entre paréntesis
+                const adminFullName = digitadorDisplay.replace(/\s*\([^)]*\)/g, '').trim(); 
+                const adminNameParts = adminFullName.split(' ').filter(p => p.length > 0);
+                
                 if (digitadorDisplay.includes('SUPERADMIN')) {
-                    // Mantiene el CIP y (SUPERADMIN)
+                    // SUPERADMIN: Mantiene el CIP y (SUPERADMIN)
                     const match = digitadorDisplay.match(/([^\s]+)\s+\(([^)]+)\)/);
-                    if (match) {
-                        digitadorDisplay = `${match[1]} (${match[2]})`; 
-                    } else {
-                        digitadorDisplay = 'SUPERADMIN';
-                    }
+                    digitadorDisplay = match ? `${match[1]} (${match[2]})` : 'SUPERADMIN';
                 } else {
-                    // Regla Admin Normal: Mostrar solo las dos primeras palabras del nombre del ADMINISTRADOR
-                    // 1. Quita el CIP y el rol entre paréntesis
-                    const adminFullName = digitadorDisplay.replace(/\s*\([^)]*\)/g, '').trim(); 
-                    // 2. Divide el nombre por espacios
-                    const adminNameParts = adminFullName.split(' ').filter(p => p.length > 0);
-                    
-                    // 3. Toma las dos primeras palabras (que deberían ser el Apellido Apellido o Apellido Nombre)
+                    // ADMIN NORMAL: Toma las dos primeras palabras del nombre
                     if (adminNameParts.length >= 2) {
                         digitadorDisplay = `${adminNameParts[0]} ${adminNameParts[1]}`.trim();
                     } else {
-                        digitadorDisplay = adminNameParts.join(' ').trim() || record.cip; // Fallback
+                        digitadorDisplay = adminNameParts.join(' ').trim() || record.cip; // Fallback al cip
                     }
                 }
             }
