@@ -42,7 +42,6 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 nombre TEXT, edad INTEGER, peso REAL, altura REAL, 
                 imc REAL, fecha TEXT,
                 registradoPor TEXT
-                -- Se eliminó la restricción UNIQUE(cip, fecha) para permitir múltiples registros por día
             );
         `, (err) => {
             if (err) {
@@ -57,30 +56,25 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 // --- 4. RUTAS DE LA API PARA REGISTROS ---
 
-// [GET] /api/patient/:dni (NUEVA RUTA para autocompletado)
+// [GET] /api/patient/:dni (MODIFICADA para autocompletado)
 app.get('/api/patient/:dni', (req, res) => {
     const { dni } = req.params;
     // Busca el registro más reciente del paciente por DNI
-    const sql = "SELECT * FROM records WHERE dni = ? ORDER BY id DESC LIMIT 1";
-    db.get(sql, [dni], (err, row) => {
+    const sql = "SELECT * FROM records WHERE dni = ? OR cip = ? ORDER BY id DESC LIMIT 1";
+    db.get(sql, [dni, dni], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ message: "Paciente no encontrado." });
         
-        // Asumiendo que el CIP es el mismo que el usuario, busca en users
-        const userSql = "SELECT email, fullName, /* fechaNacimiento */ NULL as fechaNacimiento FROM users WHERE cip = ?";
-        db.get(userSql, [row.cip], (userErr, userRow) => {
-            const fechaNacimiento = userRow ? userRow.fechaNacimiento : null;
-            
-            res.json({
-                gguu: row.gguu,
-                unidad: row.unidad,
-                cip: row.cip,
-                sexo: row.sexo,
-                apellido: row.apellido,
-                nombre: row.nombre,
-                // Nota: fechaNacimiento es NULL hasta que se añada a la tabla users
-                fechaNacimiento: fechaNacimiento 
-            });
+        // Simplemente devolvemos todos los campos que necesitamos para autocompletar
+        res.json({
+            gguu: row.gguu,
+            unidad: row.unidad,
+            cip: row.cip,
+            sexo: row.sexo,
+            apellido: row.apellido,
+            nombre: row.nombre,
+            edad: row.edad, 
+            fechaNacimiento: null 
         });
     });
 });
@@ -203,7 +197,7 @@ app.post('/api/export-excel', async (req, res) => {
                     const match = digitadorDisplay.match(/([^\s]+)\s+\(([^)]+)\)/);
                     digitadorDisplay = match ? `${match[1]} (${match[2]})` : 'SUPERADMIN';
                 } else {
-                    // ADMIN NORMAL: Toma las dos primeras palabras del nombre
+                    // ADMIN NORMAL: Toma las dos primeras palabras del nombre (Ej: Katherin Giuliana)
                     if (adminNameParts.length >= 2) {
                         digitadorDisplay = `${adminNameParts[0]} ${adminNameParts[1]}`.trim();
                     } else {
