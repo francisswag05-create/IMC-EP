@@ -170,10 +170,16 @@ app.post('/api/export-excel', async (req, res) => {
                 } else {
                     // Para administradores normales: Mostrar solo Apellido y Nombre
                     // Usamos los campos 'apellido' y 'nombre' que vienen en el record desde el cliente
-                    digitadorDisplay = `${(record.apellido || '').toUpperCase()} ${record.nombre || ''}`.trim();
-                    // Si el nombre resultante es el nombre de usuario (cip) lo dejamos así, sino se limpia
-                    if (digitadorDisplay.includes(record.cip)) {
-                         digitadorDisplay = record.cip; // Fallback al cip si no se limpia bien
+                    const apellidoNombre = `${(record.apellido || '').toUpperCase()} ${record.nombre || ''}`.trim();
+                    const nameParts = apellidoNombre.split(' ').filter(p => p.length > 0);
+                    
+                    // Asume los dos primeros como los más importantes (Apellidos)
+                    if (nameParts.length >= 2) {
+                        digitadorDisplay = `${nameParts[0]} ${nameParts[1]}`.trim();
+                    } else if (nameParts.length === 1) {
+                         digitadorDisplay = nameParts[0];
+                    } else {
+                        digitadorDisplay = record.cip; // Fallback al cip
                     }
                 }
             }
@@ -196,7 +202,7 @@ app.post('/api/export-excel', async (req, res) => {
                 record.pab, // PBA
                 riesgoAEnf, // RIESGO A ENF SEGUN PABD
                 record.imc, // IMC
-                clasificacionIMC, // CLASIFICACION DE IMC <-- CORREGIDO: Usando clasificacionMINSA
+                clasificacionIMC, // CLASIFICACION DE IMC <-- AHORA CORRECTO
                 record.motivo || 'N/A', // MOTIVO 
                 digitadorDisplay // DIGITADOR <-- SIMPLIFICADO
             ];
