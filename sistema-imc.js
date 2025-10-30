@@ -733,6 +733,7 @@ function exportToWord() {
     }
     
     // --- ESTILOS OPTIMIZADOS PARA WORD (MÁS COMPACTOS) ---
+    // Ajustado a 4px de padding para máxima compacidad y fuente pequeña
     const tableHeaderStyle = "background-color: #2F4F4F; color: white; padding: 4px; text-align: center; font-size: 10px; border: 1px solid #111; font-weight: bold; border-collapse: collapse; white-space: nowrap; font-family: 'Arial', sans-serif;";
     const cellStyle = "padding: 4px; text-align: center; font-size: 10px; border: 1px solid #ccc; vertical-align: middle; border-collapse: collapse; font-family: 'Arial', sans-serif;";
     const inaptoTextStyle = 'style="color: #991b1b; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"'; // Rojo oscuro
@@ -766,11 +767,13 @@ function exportToWord() {
     currentFilteredRecords.forEach(record => {
         // Obtenemos el resultado completo para el detalle y la clasificación MINSA
         const { resultado, clasificacionMINSA } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
+        
+        // Determinar el estilo de color (APTO=Verde, INAPTO=Rojo)
         const textStyleTag = resultado.startsWith('INAPTO') ? inaptoTextStyle : aptoTextStyle;
         const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
         
-        // La clasificación debe mostrar el estado MINSA + (Resultado Simplificado)
-        let clasificacionDisplay = `${clasificacionMINSA.toUpperCase()} (${resultado})`;
+        // CLASIFICACIÓN SIMPLIFICADA: SOLO MUESTRA EL TEXTO (ej: NORMAL)
+        let clasificacionDisplay = clasificacionMINSA.toUpperCase();
         
         htmlContent += `<tr>
             <td style="${cellStyle}">${record.unidad || 'N/A'}</td>
@@ -780,7 +783,7 @@ function exportToWord() {
             <td style="${cellStyle}">${record.peso || 'N/A'}</td>
             <td style="${cellStyle}">${record.altura || 'N/A'}</td>
             <td style="${cellStyle} font-weight: bold;">${record.imc || 'N/A'}</td>
-            <td style="${cellStyle}" ${textStyleTag}>${clasificacionDisplay}</td>
+            <td style="${cellStyle}" ${textStyleTag}>${clasificacionDisplay}</td> <!-- Muestra solo Clasificación con color de Aptitud -->
         </tr>`;
     });
     
