@@ -1,4 +1,3 @@
-
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
@@ -119,19 +118,20 @@ app.post('/api/export-excel', async (req, res) => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('CONSOLIDADO IMC');
         
-        // --- 1. Definición de Estilos ---
+        // --- 1. Definición de Estilos (MODIFICADO para compatibilidad) ---
         const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF365F37' } }; // Verde Oscuro
         const FONT_WHITE = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
         const BORDER_THIN = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         const FONT_RED = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFF0000' } }; // Rojo para INAPTO/Riesgo
         const FONT_NORMAL = { name: 'Calibri', size: 11 };
-        const NO_FILL = {}; // Fondo vacío para los datos
+        // Definimos un estilo estándar con fondo blanco para las celdas de datos
+        const DATA_FILL_STANDARD = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }; 
 
         // --- 2. Encabezados (19 Columnas) ---
         const HEADERS = [
             "N", "GGUU", "UNIDAD", "GRADO", "APELLIDOS Y NOMBRES", "DNI", "CIP", 
             "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION", 
-            "PBA", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", "MOTIVO", "DIGITADOR"
+            "PAB", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", "MOTIVO", "DIGITADOR"
         ];
         
         // --- 3. Aplicar Formato a la Fila de Encabezados (Fila 6, desde A6) ---
@@ -181,9 +181,10 @@ app.post('/api/export-excel', async (req, res) => {
                 record.registradoPor // DIGITADOR
             ];
             
-            // Aplicar formato a la fila (MODIFICADO: Usar NO_FILL)
+            // Aplicar formato a la fila (MODIFICADO: Usar DATA_FILL_STANDARD)
             dataRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-                cell.fill = NO_FILL; // Aplicar fondo vacío
+                // Aplicar estilos base para asegurar un styles.xml válido
+                cell.fill = DATA_FILL_STANDARD; 
                 cell.border = BORDER_THIN;
                 cell.font = FONT_NORMAL;
                 
@@ -193,7 +194,8 @@ app.post('/api/export-excel', async (req, res) => {
                 }
                 
                 // Formato Condicional para Riesgo y Clasificación de PA (Col 11 y 13)
-                if ((colNumber === 11 && paClasificacion.includes('HIPERTENSION')) || (colNumber === 13 && riesgoAEnf.includes('MUY ALTO'))) {
+                // OJO: Los índices de columna en eachCell son 1-basados.
+                if ((colNumber === 13 && paClasificacion.includes('HIPERTENSION')) || (colNumber === 15 && riesgoAEnf.includes('MUY ALTO'))) {
                     cell.font = FONT_RED;
                 }
             });
@@ -246,6 +248,23 @@ app.post('/api/login', (req, res) => {
         });
     });
 });
+
+// [PUT] /api/users/password/:cip (Ruta faltante para edición)
+app.put('/api/users/password/:cip', (req, res) => {
+    const { cip } = req.params;
+    const { newPassword } = req.body;
+    if (!newPassword) return res.status(400).json({ message: "Nueva contraseña requerida." });
+    bcrypt.hash(newPassword, 10, (err, hash) => {
+        if (err) return res.status(500).json({ message: "Error al encriptar la contraseña." });
+        const sql = `UPDATE users SET password = ? WHERE cip = ?`;
+        db.run(sql, [hash, cip], function(err) {
+            if (err) return res.status(500).json({ message: "Error al actualizar la contraseña.", error: err.message });
+            if (this.changes === 0) return res.status(404).json({ message: "Usuario no encontrado." });
+            res.json({ message: "Contraseña actualizada." });
+        });
+    });
+});
+
 
 // [GET] /api/users
 app.get('/api/users', (req, res) => {
