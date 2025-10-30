@@ -231,9 +231,9 @@ function updateAdminTableHeaders() {
     }
 }
 
+// SIMPLIFICADA PARA SOLO APTO/INAPTO
 function getSimplifiedAptitudeStyle(resultado) {
-    if (resultado.includes('INAPTO')) return 'bg-red-700 text-white';
-    // Si incluye APTO (EXCEPCIÓN PAB), usa el verde de apto
+    if (resultado.startsWith('INAPTO')) return 'bg-red-700 text-white';
     return 'bg-green-700 text-white'; 
 }
 
@@ -263,26 +263,32 @@ function getClassificacionPA(paString) {
 }
 
 
-// --- Función getRiskByWaist (RIESGO A ENF SEGUN PABD - AJUSTADO A TABLAS OMS) ---
+// --- Función getRiskByWaist (RIESGO A ENF SEGUN PABD - AJUSTADO A CUADRO 2 OMS) ---
 function getRiskByWaist(sexo, pab) {
     const pabFloat = parseFloat(pab);
     if (sexo === 'Masculino') {
-        // Normal: 94 o menos (<= 94). Riesgo Alto: 95-102 (> 94 y <= 102). Riesgo Muy Alto: Más de 102 (> 102).
-        if (pabFloat <= 94) return 'RIESGO BAJO'; 
-        if (pabFloat <= 102) return 'RIESGO ALTO';
+        // Riesgo Bajo: < 94
+        if (pabFloat < 94) return 'RIESGO BAJO'; 
+        // Riesgo Alto: >= 94 y < 102 (implícito)
+        if (pabFloat < 102) return 'RIESGO ALTO';
+        // Riesgo Muy Alto: >= 102
         return 'RIESGO MUY ALTO'; 
     } 
-    // Femenino: Normal: 80 o menos (<= 80). Riesgo Alto: 81-88 (> 80 y <= 88). Riesgo Muy Alto: Más de 88 (> 88).
+    
+    // Femenino:
+    // Riesgo Bajo: < 80
     if (sexo === 'Femenino') {
-        if (pabFloat <= 80) return 'RIESGO BAJO';
-        if (pabFloat <= 88) return 'RIESGO ALTO';
+        // Riesgo Alto: >= 80 y < 88 (implícito)
+        if (pabFloat < 80) return 'RIESGO BAJO';
+        // Riesgo Muy Alto: >= 88
+        if (pabFloat < 88) return 'RIESGO ALTO'; 
         return 'RIESGO MUY ALTO';
     }
     return 'INDETERMINADO'; 
 }
 
 
-// --- Función getAptitude (CON REGLA DE EXCEPCIÓN FINAL: PAB <= 94 ANULA INAPTO) ---
+// --- Función getAptitude (SIMPLIFICADA: SOLO APTO/INAPTO + REGLAS DE EXCEPCIÓN) ---
 function getAptitude(imc, sexo, pab, paString) {
     const imcFloat = parseFloat(imc);
     const pabFloat = parseFloat(pab); 
@@ -302,36 +308,62 @@ function getAptitude(imc, sexo, pab, paString) {
     // 3. Clasificación de Presión Arterial (CLASIFICACION)
     const paClasificacion = getClassificacionPA(paString);
     
-    // 4. Determinación de Aptitud (Regla Combinada - Estándar)
+    // 4. Determinación de Aptitud (Regla Estándar de INAPTO - Simplificada)
     
-    // INAPTO por Obesidad Extrema o Riesgo Abdominal Muy Alto
-    // Usamos imcFloat >= 30.0 para incluir Obesidad I, II y III 
+    // REGLA 1: INAPTO por IMC >= 30.0 (Obesidad I, II, III)
     if (imcFloat >= 30.0) {
-        resultado = "INAPTO (Obesidad)";
-        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. INAPTO.`;
-    } else if (riesgoAEnf === 'RIESGO MUY ALTO') {
-        resultado = "INAPTO (Riesgo Abdominal)";
-        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. INAPTO.`;
+        resultado = "INAPTO (IMC Obesidad)";
+        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}.`;
+    } 
+    // REGLA 2: INAPTO por Riesgo Abdominal MUY ALTO (OMS: H >= 102, M >= 88)
+    else if (riesgoAEnf === 'RIESGO MUY ALTO') {
+        resultado = "INAPTO (Riesgo Abdominal Muy Alto)";
+        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}.`;
+    } 
+    // REGLA 3: INAPTO por PAB Alto (H >= 94, M >= 80) Y No Normal/Sobrepeso
+    // **Regla específica de tu último mensaje:** PAB >= 95 (H) o PAB >= 88 (M) es INAPTO
+    else if ((sexo === 'Masculino' && pabFloat >= 95) || (sexo === 'Femenino' && pabFloat >= 88)) {
+        resultado = "INAPTO (PAB Alto/Muy Alto)";
+        detalle = `Clasificación MINSA: ${clasificacionMINSA}. PAB Mayor a umbral de Aptitud.`;
     }
-    // APTO con Monitoreo (Sobrepeso o Riesgo Abdominal Alto o Hipertensión)
-    else if (imcFloat >= 25.0 || riesgoAEnf === 'RIESGO ALTO' || paClasificacion === 'HIPERTENSION' || paClasificacion === 'PRE-HIPERTENSION') {
-        resultado = "APTO (MONITOREO)";
-        detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. PA: ${paClasificacion}. APTO. Requiere monitoreo.`;
-    }
-    // APTO ÓPTIMO
+    // REGLA 4: Si no fue INAPTO por las reglas de arriba, es APTO.
     else { 
+        // Ya no existe APTO (MONITOREO), todo lo que no es INAPTO es APTO.
         resultado = "APTO";
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. PA: ${paClasificacion}. Aptitud confirmada.`;
     }
 
-    // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (PAB <= 94 anula INAPTO)
-    if (resultado.startsWith('INAPTO') && pabFloat <= 94) {
-        // La regla se cumple si el resultado inicial es INAPTO Y PAB es 94.0 o menos.
+    // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (LA REGLA DEL PAB ANULADOR)
+    // Regla: Si el resultado fue INAPTO, PERO el PAB es <= 94 (H) o < 80 (M).
+    let umbralExcepcion;
+    if (sexo === 'Masculino') {
+        umbralExcepcion = 94.0; // Hombres <= 94 es APTO
+    } else { // Femenino
+        umbralExcepcion = 79.99; // Mujeres < 80 es APTO (para ser estricto con la tabla)
+    }
+
+    if (resultado.startsWith('INAPTO') && pabFloat <= umbralExcepcion) {
+        // La regla se cumple si el resultado inicial es INAPTO Y PAB es menor o igual al umbral.
         resultado = "APTO (EXCEPCIÓN PAB)";
-        detalle = `Resultado original: ${clasificacionMINSA}. Sobrescrito por Regla Médica: PAB <= 94, se considera APTO.`;
+        detalle = `Resultado original INAPTO. Sobrescrito por Regla Médica: PAB <= ${umbralExcepcion} cm.`;
     }
     
-    return { resultado, detalle, clasificacionMINSA, paClasificacion, riesgoAEnf };
+    // Si la PA no es NORMAL y el resultado es APTO, mantendremos el detalle informativo
+    if (resultado.startsWith('APTO') && (paClasificacion === 'HIPERTENSION' || paClasificacion === 'PRE-HIPERTENSION')) {
+        detalle += ` NOTA: Vigilancia por PA: ${paClasificacion}.`;
+    }
+
+
+    // El resultado final para el filtro se simplifica (esto también afecta al Badge)
+    const resultadoSimplificado = resultado.startsWith('APTO') ? 'APTO' : 'INAPTO';
+
+    return { 
+        resultado: resultadoSimplificado, 
+        detalle, 
+        clasificacionMINSA, 
+        paClasificacion, 
+        riesgoAEnf 
+    };
 }
 
 // --- 4. Funciones de Autenticación y Administración ---
@@ -618,11 +650,8 @@ function filterTable() {
             
             // Lógica de filtrado de Aptitud
             if (aptitudeFilterValue === 'APTO') {
-                // Filtra por APTO, incluyendo APTO (EXCEPCIÓN PAB), pero excluyendo APTO (MONITOREO)
-                // Se usa startsWith('APTO') para capturar 'APTO' y 'APTO (EXCEPCIÓN PAB)'
-                return resultado.startsWith('APTO') && !resultado.includes('MONITOREO');
-            } else if (aptitudeFilterValue === 'MONITOREO') {
-                return resultado.includes('MONITOREO');
+                // El resultado de getAptitude ahora solo es 'APTO' o 'INAPTO'
+                return resultado.startsWith('APTO'); 
             } else if (aptitudeFilterValue === 'INAPTO') {
                 return resultado.startsWith('INAPTO');
             }
@@ -650,10 +679,11 @@ function renderTable(records) {
     }
     records.forEach(data => {
         // LLAMADA ACTUALIZADA PARA OBTENER TODAS LAS CLASIFICACIONES
-        // El recalculo aquí asegura que el resultado se muestre correctamente con la nueva lógica de excepción
         const { resultado, paClasificacion, riesgoAEnf } = getAptitude(data.imc, data.sexo, data.pab, data.pa);
-        const badgeClass = getSimplifiedAptitudeStyle(resultado);
-        const rowBgClass = resultado.includes('INAPTO') ? 'bg-red-900/10' : '';
+        
+        // Uso de la función simplificada para el estilo del badge
+        const badgeClass = getSimplifiedAptitudeStyle(resultado); 
+        const rowBgClass = resultado.startsWith('INAPTO') ? 'bg-red-900/10' : '';
         const row = tableBody.insertRow();
         row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
         
@@ -680,7 +710,7 @@ function renderTable(records) {
             <td class="px-4 py-3 whitespace-nowrap text-sm ${riesgoAbdominalClass}">${data.pab || 'N/A'} cm (${riesgoAEnf})</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${data.peso || 'N/A'} kg / ${data.altura || 'N/A'} m</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-gold">${data.edad || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.includes('INAPTO') ? 'text-red-500' : 'text-color-accent-gold'}">${data.imc || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.startsWith('INAPTO') ? 'text-red-500' : 'text-color-accent-gold'}">${data.imc || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-center">${actionButtons}</td>
@@ -710,7 +740,7 @@ function exportToWord() {
     
     currentFilteredRecords.forEach(record => {
         const { resultado, riesgoAEnf, paClasificacion } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
-        const textStyleTag = resultado.includes('INAPTO') ? inaptoTextStyle : aptoTextStyle;
+        const textStyleTag = resultado.startsWith('INAPTO') ? inaptoTextStyle : aptoTextStyle;
         const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
         const riesgoAbdominalColor = riesgoAEnf.includes('MUY ALTO') ? 'style="color: #991b1b; font-weight: bold;"' : '';
         
@@ -822,7 +852,7 @@ document.getElementById('bmi-form').addEventListener('submit', function(e) {
         // LLAMADA A LA LÓGICA CLÍNICA COMPLETA
         const { resultado, detalle } = getAptitude(imc, sex, pab, pa); 
 
-        const badgeClass = resultado.includes('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
+        const badgeClass = resultado.startsWith('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
         document.getElementById('bmi-value').textContent = imc;
         const aptitudeBadge = document.getElementById('aptitude-badge');
         aptitudeBadge.textContent = resultado;
