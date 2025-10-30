@@ -844,6 +844,7 @@ function exportToWord() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1021,86 +1022,8 @@ document.getElementById('month-filter').addEventListener('change', filterTable);
 document.getElementById('aptitude-filter').addEventListener('change', filterTable); // <-- CONEXIÓN DEL NUEVO FILTRO
 document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
 
-// LÓGICA DE AUTOCOMPLETADO
-async function fetchAndAutoFill(queryType, queryValue) {
-    if (!queryValue || queryValue.length < 5) return;
-    
-    // Usamos la ruta existente /api/patient/:dni o /api/patient/:cip
-    const url = `/api/patient/${queryValue}`; 
-
-    try {
-        const response = await fetch(url);
-        
-        if (response.status === 404) {
-            document.getElementById('input-gguu').value = '';
-            document.getElementById('input-userid').value = '';
-            document.getElementById('input-sex-admin').value = 'Masculino';
-            document.getElementById('input-lastname').value = '';
-            document.getElementById('input-firstname').value = '';
-            document.getElementById('input-age-admin').value = '';
-            document.getElementById('input-dob').value = '';
-            if (queryValue.length > 7) {
-                displayMessage('ATENCIÓN', `Paciente con ${queryType} ${queryValue} no encontrado. Ingrese datos manualmente.`, 'warning');
-            }
-            return;
-        }
-        
-        if (!response.ok) throw new Error('Error al buscar paciente.');
-        
-        const patientData = await response.json();
-        
-        // Rellenar campos estáticos y de identificación
-        document.getElementById('input-gguu').value = patientData.gguu || '';
-        document.getElementById('input-userid').value = patientData.cip || '';
-        document.getElementById('input-sex-admin').value = patientData.sexo || 'Masculino';
-        document.getElementById('input-lastname').value = patientData.apellido || '';
-        document.getElementById('input-firstname').value = patientData.nombre || '';
-        
-        // Rellenar edad
-        document.getElementById('input-age-admin').value = patientData.edad || '';
-        // Si tienes la fecha de nacimiento, úsala para calcular la edad precisa y llenar el campo DOB
-        if (patientData.fechaNacimiento) {
-            document.getElementById('input-dob').value = patientData.fechaNacimiento;
-            const edadCalculada = calculateAge(patientData.fechaNacimiento);
-            document.getElementById('input-age-admin').value = edadCalculada;
-        } else {
-             document.getElementById('input-dob').value = '';
-        }
-        
-        displayMessage('ÉXITO', 'Datos del paciente cargados automáticamente.', 'success');
-
-    } catch (error) {
-        console.error("Error en autocompletado:", error);
-    }
-}
-
-function handleDNIInput(event) {
-    const dni = event.target.value;
-    if (dni.length === 8 && /^\d+$/.test(dni)) {
-        fetchAndAutoFill('DNI', dni);
-    } else {
-        // Si borra el DNI, limpiamos el autocompletado
-        if (dni.length < 8) {
-            document.getElementById('input-gguu').value = '';
-            document.getElementById('input-userid').value = '';
-            document.getElementById('input-sex-admin').value = 'Masculino';
-            document.getElementById('input-lastname').value = '';
-            document.getElementById('input-firstname').value = '';
-            document.getElementById('input-age-admin').value = '';
-            document.getElementById('input-dob').value = '';
-        }
-    }
-}
-
-function handleCIPInput(event) {
-    const cip = event.target.value;
-    if (cip.length >= 5) { // Usamos una longitud mínima para evitar spamming en el servidor
-        fetchAndAutoFill('CIP', cip);
-    }
-}
-
+// NUEVO LISTENER: Buscar al paciente cuando se escriba el DNI
 document.getElementById('input-dni').addEventListener('input', handleDNIInput);
-document.getElementById('input-userid').addEventListener('input', handleCIPInput);
 
 document.addEventListener('DOMContentLoaded', () => {
     updateUI();
