@@ -49,10 +49,17 @@ async function fetchAndDisplayUsers() {
         }
 
         users.forEach(user => {
+            // --- LÓGICA DE VISUALIZACIÓN MODIFICADA ---
+            let userFullNameDisplay = `${user.fullName}`; // Por defecto, nombre completo
+            
+            if (user.role === 'admin') {
+                userFullNameDisplay = `${user.fullName} (ADMINISTRADOR)`;
+            } else if (user.role === 'superadmin') {
+                userFullNameDisplay = `${user.fullName} (SUPERADMIN)`;
+            }
+
+
             const row = tableBody.insertRow();
-            // Lógica para mostrar rol en paréntesis
-            const userRoleText = user.role === 'superadmin' ? 'SUPERADMIN' : 'ADMINISTRADOR'; 
-            const userFullNameDisplay = `${user.fullName} (${userRoleText})`;
 
             row.innerHTML = `
                 <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${user.cip}</td>
@@ -659,8 +666,21 @@ function filterTable() {
             return true;
         });
     }
+    
+    // **** CORRECCIÓN CRÍTICA: AÑADIR DATOS CALCULADOS AL OBJETO ANTES DE ENVIARLO ****
+    currentFilteredRecords = recordsToDisplay.map(record => {
+        // Recalcular TODOS los campos de clasificación que el backend necesita
+        const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
+        return {
+            ...record,
+            clasificacionMINSA: clasificacionMINSA, // <-- ESTO ES LO QUE EL BACKEND NECESITA
+            resultado: resultado,
+            paClasificacion: paClasificacion,
+            riesgoAEnf: riesgoAEnf
+        };
+    });
+    // *********************************************************************************
 
-    currentFilteredRecords = recordsToDisplay;
     renderTable(currentFilteredRecords);
 }
 
