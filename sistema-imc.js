@@ -1027,4 +1027,4 @@ document.getElementById('input-dni').addEventListener('input', handleDNIInput);
 
 document.addEventListener('DOMContentLoaded', () => {
     updateUI();
-});```
+});
