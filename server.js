@@ -118,7 +118,7 @@ app.post('/api/export-excel', async (req, res) => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('CONSOLIDADO IMC');
         
-        // --- 1. Definición de Estilos (MODIFICADO para compatibilidad) ---
+        // --- 1. Definición de Estilos (Solución para styles.xml) ---
         const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF365F37' } }; // Verde Oscuro
         const FONT_WHITE = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
         const BORDER_THIN = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
@@ -130,7 +130,7 @@ app.post('/api/export-excel', async (req, res) => {
         // --- 2. Encabezados (19 Columnas) ---
         const HEADERS = [
             "N", "GGUU", "UNIDAD", "GRADO", "APELLIDOS Y NOMBRES", "DNI", "CIP", 
-            "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION", 
+            "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION PA", 
             "PAB", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", "MOTIVO", "DIGITADOR"
         ];
         
@@ -158,6 +158,26 @@ app.post('/api/export-excel', async (req, res) => {
             const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
             const resultado = (record.resultado || 'N/A').toUpperCase();
             
+            // --- LÓGICA DE DIGITADOR SIMPLIFICADA ---
+            let digitadorDisplay = record.registradoPor || '';
+            if (digitadorDisplay) {
+                if (digitadorDisplay.includes('SUPERADMIN')) {
+                    // Mantiene el CIP y (SUPERADMIN)
+                    const match = digitadorDisplay.match(/([^\s]+)\s+\(([^)]+)\)/);
+                    if (match) {
+                        digitadorDisplay = `${match[1]} (${match[2]})`; 
+                    }
+                } else {
+                    // Para administradores normales: Mostrar solo Apellido y Nombre
+                    // Usamos los campos 'apellido' y 'nombre' que vienen en el record desde el cliente
+                    digitadorDisplay = `${(record.apellido || '').toUpperCase()} ${record.nombre || ''}`.trim();
+                    // Si el nombre resultante es el nombre de usuario (cip) lo dejamos así, sino se limpia
+                    if (digitadorDisplay.includes(record.cip)) {
+                         digitadorDisplay = record.cip; // Fallback al cip si no se limpia bien
+                    }
+                }
+            }
+            
             // Datos en el orden de los encabezados (19 campos)
             dataRow.values = [
                 index + 1, // N
@@ -176,26 +196,30 @@ app.post('/api/export-excel', async (req, res) => {
                 record.pab, // PBA
                 riesgoAEnf, // RIESGO A ENF SEGUN PABD
                 record.imc, // IMC
-                clasificacionIMC, // CLASIFICACION DE IMC
-                record.motivo || '### NO ASISTIO', // MOTIVO
-                record.registradoPor // DIGITADOR
+                clasificacionIMC, // CLASIFICACION DE IMC <-- CORREGIDO: Usando clasificacionMINSA
+                record.motivo || 'N/A', // MOTIVO 
+                digitadorDisplay // DIGITADOR <-- SIMPLIFICADO
             ];
             
-            // Aplicar formato a la fila (MODIFICADO: Usar DATA_FILL_STANDARD)
+            // Aplicar formato a la fila (Solución para styles.xml)
             dataRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-                // Aplicar estilos base para asegurar un styles.xml válido
+                // Aplicar estilos base
                 cell.fill = DATA_FILL_STANDARD; 
                 cell.border = BORDER_THIN;
                 cell.font = FONT_NORMAL;
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
                 
-                // Formato Condicional (Col 17 'CLASIFICACION DE IMC' o riesgos)
+                // Col 17 (CLASIFICACION DE IMC)
                 if (colNumber === 17 && (resultado.includes('INAPTO') || clasificacionIMC.includes('OBESIDAD'))) {
                     cell.font = FONT_RED; 
                 }
                 
-                // Formato Condicional para Riesgo y Clasificación de PA (Col 11 y 13)
-                // OJO: Los índices de columna en eachCell son 1-basados.
-                if ((colNumber === 13 && paClasificacion.includes('HIPERTENSION')) || (colNumber === 15 && riesgoAEnf.includes('MUY ALTO'))) {
+                // Col 13 (CLASIFICACION PA)
+                if (colNumber === 13 && paClasificacion.includes('HIPERTENSION')) {
+                    cell.font = FONT_RED;
+                }
+                // Col 15 (RIESGO A ENF SEGUN PABD)
+                if (colNumber === 15 && riesgoAEnf.includes('MUY ALTO')) {
                     cell.font = FONT_RED;
                 }
             });
