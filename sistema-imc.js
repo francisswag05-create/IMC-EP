@@ -916,11 +916,115 @@ function exportToExcel() {
 
 // --- 7. Event Listeners ---
 
-// ... (Listeners existentes)
+document.getElementById('bmi-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const weight = parseFloat(document.getElementById('input-weight').value);
+    const height = parseFloat(document.getElementById('input-height').value);
+    const pab = parseFloat(document.getElementById('input-pab-public').value); // <-- NUEVO
+    const sex = document.getElementById('input-sex').value;
+    
+    // NOTA: Para el formulario público, no pedimos PA, usaremos N/A o un valor neutral.
+    const pa = 'N/A'; 
+    
+    if (weight > 0 && height > 0 && pab > 0) { // <-- VALIDACIÓN PAB
+        const imc = calculateIMC(weight, height);
+        
+        // LLAMADA A LA LÓGICA CLÍNICA COMPLETA
+        const { resultado, detalle } = getAptitude(imc, sex, pab, pa); 
+
+        const badgeClass = resultado.startsWith('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
+        document.getElementById('bmi-value').textContent = imc;
+        const aptitudeBadge = document.getElementById('aptitude-badge');
+        aptitudeBadge.textContent = resultado;
+        aptitudeBadge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
+        document.getElementById('aptitude-detail').textContent = detalle;
+        document.getElementById('result-box').classList.remove('hidden');
+    } else {
+        displayMessage('Datos Inválidos', 'Por favor, ingrese Peso, Altura y Perímetro Abdominal válidos.', 'error');
+    }
+});
+
+document.getElementById('admin-record-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    if (!isAuthenticated) {
+        displayMessage('Acceso Denegado', 'Debe iniciar sesión para operar.', 'error');
+        return;
+    }
+    const form = e.target;
+    
+    // CAPTURA DE DATOS DE LOS 11 INPUTS
+    const gguu = form.elements['input-gguu'].value;
+    const unidad = form.elements['input-unidad'].value;
+    const dni = form.elements['input-dni'].value;
+    const pa = form.elements['input-pa'].value;
+    const sexo = form.elements['input-sex-admin'].value;
+    const cip = form.elements['input-userid'].value;
+    const grado = form.elements['input-role'].value;
+    const apellido = form.elements['input-lastname'].value;
+    const nombre = form.elements['input-firstname'].value;
+    const dob = form.elements['input-dob'].value; // Capturar DOB
+    const edad = calculateAge(dob); // Calcular edad desde DOB
+    const peso = parseFloat(form.elements['input-weight-admin'].value);
+    const altura = parseFloat(form.elements['input-height-admin'].value);
+    const pab = parseFloat(form.elements['input-pab'].value); 
+
+    // VALIDACIÓN DE CAMPOS CLAVE
+    if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 0 && gguu && unidad && dni && pa) {
+        const imc = calculateIMC(peso, altura);
+        // LLAMADA A LA LÓGICA CLÍNICA COMPLETA
+        const { resultado, detalle, paClasificacion, riesgoAEnf } = getAptitude(imc, sexo, pab, pa); 
+        
+        const badgeClass = getSimplifiedAptitudeStyle(resultado);
+        document.getElementById('admin-bmi-value').textContent = imc;
+        document.getElementById('admin-aptitude-badge').textContent = resultado;
+        document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
+        document.getElementById('admin-aptitude-detail').textContent = detalle;
+        document.getElementById('admin-result-box').classList.remove('hidden');
+        
+        // Preparar el campo Digitador: [CIP/Nombre] ([Cargo] [Primer Apellido])
+        const primerApellido = currentAdminFullName.split(' ')[0] || ''; 
+        const adminRoleText = currentAdminFullName.includes('MD') || currentAdminFullName.includes('DR') ? 'DR/MD' : (currentUserRole === 'superadmin' ? 'SUPERADMIN' : 'ADMIN');
+        const digitadorFinal = `${currentAdminUser} (${adminRoleText} ${primerApellido})`; // <-- CORREGIDO
+
+        if (isEditMode) {
+            // AÑADIR TODOS LOS CAMPOS
+            const updatedRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc };
+            updateRecord(currentEditingRecordId, updatedRecord);
+        } else {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const formattedDate = `${day}/${month}/${year}`;
+            
+            // AÑADIR TODOS LOS CAMPOS
+            const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: digitadorFinal };
+            saveRecord(newRecord);
+        }
+    } else {
+        displayMessage('Error de Entrada', 'Por favor, complete todos los campos obligatorios y revise valores numéricos (Peso, Altura, PAB).', 'error');
+        document.getElementById('admin-result-box').classList.add('hidden');
+    }
+});
+
+document.getElementById('admin-login-button').addEventListener('click', attemptAdminLogin);
+document.getElementById('logout-button').addEventListener('click', logoutAdmin);
+document.getElementById('export-word-button').addEventListener('click', exportToWord);
+// CONEXIÓN DEL BOTÓN EXCEL
+document.getElementById('export-excel-button').addEventListener('click', exportToExcel); 
+document.getElementById('forgot-password-link').addEventListener('click', function(e) {
+    e.preventDefault(); 
+    handleForgotPassword();
+});
+document.getElementById('name-filter').addEventListener('input', filterTable);
+document.getElementById('age-filter').addEventListener('input', filterTable);
+document.getElementById('month-filter').addEventListener('change', filterTable);
+document.getElementById('aptitude-filter').addEventListener('change', filterTable); // <-- CONEXIÓN DEL NUEVO FILTRO
+document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
 
 // NUEVO LISTENER: Buscar al paciente cuando se escriba el DNI
 document.getElementById('input-dni').addEventListener('input', handleDNIInput);
 
 document.addEventListener('DOMContentLoaded', () => {
     updateUI();
-});
+});```
