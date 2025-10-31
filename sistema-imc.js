@@ -9,6 +9,9 @@ let isEditMode = false;
 let currentEditingRecordId = null;
 let progressionChart = null; // Variable para la instancia del gráfico Chart.js
 
+// Variable global para el mes/año actual por defecto (Ej: '10/2025')
+let currentMonthYearDefault = ''; 
+
 // --- 2. Funciones de Utilidad y UI ---
 function displayMessage(title, text, type) {
     const box = document.getElementById('message-box');
@@ -662,6 +665,16 @@ function populateMonthFilter() {
         option.textContent = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${year} (${count} Registros)`;
         filterSelect.appendChild(option);
     });
+    
+    // *** CORRECCIÓN CLAVE: ESTABLECER MES ACTUAL COMO FILTRO POR DEFECTO ***
+    const now = new Date();
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const currentYear = now.getFullYear();
+    const currentMonthYear = `${currentMonth}/${currentYear}`; // (Ej: '10/2025')
+    
+    filterSelect.value = currentMonthYear;
+    // *** FIN CORRECCIÓN CLAVE ***
+    
     const defaultOption = filterSelect.querySelector('option[value=""]');
     defaultOption.textContent = `Todos los Meses (${allRecordsFromDB.length} Registros)`;
 }
@@ -671,8 +684,9 @@ function populateMonthFilter() {
 function filterTable() {
     const nameSearchTerm = document.getElementById('name-filter').value.toLowerCase().trim();
     const ageFilterValue = document.getElementById('age-filter').value;
+    // *** CORRECCIÓN: Capturar el valor del filtro, que ahora por defecto es el mes actual ***
     const monthFilter = document.getElementById('month-filter').value;
-    // MEJORA: Garantizar que el valor sea una cadena vacía si no hay selección
+    // ...
     const aptitudeFilterValue = (document.getElementById('aptitude-filter').value || '').toUpperCase(); 
 
     let recordsToDisplay = allRecordsFromDB;
@@ -691,7 +705,7 @@ function filterTable() {
     }
     
     // Aplicar Filtro de Mes
-    if (monthFilter) {
+    if (monthFilter) { // Solo filtra si monthFilter no es la cadena vacía ("Todos los Meses")
         recordsToDisplay = recordsToDisplay.filter(record => 
             record.fecha && record.fecha.substring(3) === monthFilter
         );
@@ -1445,5 +1459,18 @@ document.getElementById('input-dni').addEventListener('blur', handleDNIInput);
 // document.getElementById('input-userid').removeEventListener('blur', handleCIPInput);
 
 document.addEventListener('DOMContentLoaded', () => {
+    // *** CORRECCIÓN CLAVE: Inicializar el filtro al mes actual al cargar el DOM ***
+    const now = new Date();
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const currentYear = now.getFullYear();
+    const currentMonthYear = `${currentMonth}/${currentYear}`; 
+
+    const filterSelect = document.getElementById('month-filter');
+    if (filterSelect) {
+        // Aseguramos que el filtro se establezca al mes actual
+        filterSelect.value = currentMonthYear;
+    }
+    // *** FIN CORRECCIÓN CLAVE ***
+
     updateUI();
 });
