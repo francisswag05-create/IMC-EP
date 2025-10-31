@@ -885,67 +885,6 @@ function exportToWord() {
 }
 
 
-// --- FUNCIÓN PARA EXPORTAR A EXCEL (LLAMA AL SERVIDOR) ---
-function exportToExcel() {
-    if (!isAuthenticated || currentFilteredRecords.length === 0) {
-        displayMessage('Error', 'No se puede exportar sin registros o sin autenticación.', 'error');
-        return;
-    }
-    
-    // CAPTURAR EL MES DEL REPORTE DEL NUEVO INPUT
-    const reportMonth = document.getElementById('input-report-month').value.toUpperCase();
-    
-    // Cambiar el texto del botón
-    const btn = document.getElementById('export-excel-button');
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> GENERANDO...';
-    btn.disabled = true;
-
-    fetch('/api/export-excel', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        // Enviamos los datos filtrados Y el mes del reporte al servidor
-        body: JSON.stringify({
-            records: currentFilteredRecords,
-            reportMonth: reportMonth 
-        })
-    })
-    .then(response => {
-        if (!response.ok) {
-            // Manejar errores del servidor (404, 500)
-            return response.json().then(error => { throw new Error(error.message || 'Error desconocido del servidor.'); });
-        }
-        // El servidor devuelve el archivo como un blob binario
-        return response.blob(); 
-    })
-    .then(blob => {
-        // Crear la URL del objeto y simular la descarga
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-        a.href = url;
-        a.download = `Reporte_SIMCEP_Mensual_${date}.xlsx`; // <-- Extension XLSX
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-
-        displayMessage('Exportación Exitosa', `Se ha generado el archivo .xlsx con formato.`, 'success');
-    })
-    .catch(error => {
-        console.error('Error en la descarga de Excel:', error);
-        displayMessage('Error de Exportación', `No se pudo generar el archivo: ${error.message}`, 'error');
-    })
-    .finally(() => {
-        // Restaurar el botón
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-    });
-}
-
-
 // --- FUNCIÓN PARA PROCESAR Y EXPORTAR DATOS ESTADÍSTICOS ---
 async function exportStatsToWord() {
     if (!isAuthenticated) {
@@ -1108,13 +1047,14 @@ async function exportStatsToWord() {
     // LÓGICA DE DESCARGA
     const filename = `Reporte_Estadistico_SIMCEP_${isIndividual ? records[0].cip : 'Consolidado'}_${reportDate.replace(/\//g, '-')}.doc`;
     const blob = new Blob([htmlContent], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
+    const downloadUrl = URL.createObjectURL(blob); // <<-- CORREGIDO
     const link = document.createElement('a');
-    link.href = url;
+    link.href = downloadUrl;
+    link.download = filename; // <<-- Agregado filename al link de descarga
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(downloadUrl);
     displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
 }
 
