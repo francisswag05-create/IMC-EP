@@ -10,6 +10,17 @@ primary_region = 'gru'
   auto_start_machines = true
   min_machines_running = 0
 
+  # *** SECCIÓN AÑADIDA PARA VERIFICACIÓN DE SALUD (ELIMINA EL WARNING DE ESCUCHA) ***
+  [http_service.checks]
+    # Nombre del chequeo (puede ser cualquiera)
+    grace_period = "5s"
+    interval = "15s"
+    method = "GET"
+    # La ruta '/status' es la que añadimos a server.js y devuelve 200 OK
+    path = "/status" 
+    timeout = "5s"
+  # *** FIN SECCIÓN AÑADIDA ***
+
 [mounts]
   source = "simcep_data"
   destination = "/data"

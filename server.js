@@ -81,6 +81,11 @@ function dbRunPromise(sql, params) {
     });
 }
 
+// [GET] /status - RUTA AÑADIDA PARA HEALTH CHECK DE FLY.IO
+app.get('/status', (req, res) => {
+    res.status(200).send('OK');
+});
+
 // --- 4. RUTAS DE LA API PARA REGISTROS ---
 
 // [GET] /api/stats (NUEVA RUTA DE ESTADÍSTICAS AVANZADAS)
