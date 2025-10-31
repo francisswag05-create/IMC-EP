@@ -7,6 +7,7 @@ let allRecordsFromDB = [];
 let currentFilteredRecords = [];
 let isEditMode = false;
 let currentEditingRecordId = null;
+let progressionChart = null; // Variable para la instancia del gráfico Chart.js
 
 // --- 2. Funciones de Utilidad y UI ---
 function displayMessage(title, text, type) {
@@ -729,6 +730,109 @@ function filterTable() {
     // *********************************************************************************
 
     renderTable(currentFilteredRecords);
+    
+    // Llamar a la renderización del gráfico con los datos filtrados
+    renderProgressionChart(currentFilteredRecords);
+}
+
+
+function renderProgressionChart(records) {
+    const ctx = document.getElementById('bmiProgressionChart');
+    const chartCard = document.getElementById('stats-chart-card');
+    if (!ctx) return; // Si no existe el canvas, salir
+
+    // 1. Determinar si es un reporte individual (para gráfica de progresión)
+    const cipList = records.map(r => r.cip);
+    const isIndividual = records.length > 0 && cipList.every((val, i, arr) => val === arr[0]);
+    
+    // Si no es un reporte individual (consolidado), solo mostramos el resumen estático en el word
+    if (!isIndividual) {
+        chartCard.style.display = 'none';
+        return;
+    }
+    
+    chartCard.style.display = 'block';
+
+    const labels = records.map(r => r.fecha.substring(3)); // Mes/Año
+    const dataPoints = records.map(r => r.motivo === 'NO ASISTIÓ' ? null : parseFloat(r.imc));
+
+    // Si ya existe una instancia de gráfico, la destruimos
+    if (progressionChart) {
+        progressionChart.destroy();
+    }
+
+    progressionChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Índice de Masa Corporal (IMC)',
+                data: dataPoints,
+                borderColor: '#CCFF00', // Verde Neón (tu color accent-lime)
+                backgroundColor: 'rgba(204, 255, 0, 0.1)',
+                borderWidth: 2,
+                tension: 0.4,
+                spanGaps: true, // Conecta los meses de NO ASISTIÓ
+                pointRadius: 5,
+                pointBackgroundColor: dataPoints.map(imc => {
+                    if (imc === null) return '#808080'; // Gris para NO ASISTIÓ
+                    if (imc >= 25) return '#E74C3C'; // Rojo para Sobrepeso/Obesidad (tu color alert-red)
+                    return '#008744'; // Verde para Normal (tu color primary-green)
+                })
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    title: {
+                        display: true,
+                        text: 'IMC',
+                        color: '#EEEEEE'
+                    },
+                    min: 15,
+                    max: 40,
+                    ticks: {
+                        color: '#A0A0A0'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: '#A0A0A0'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#EEEEEE'
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.raw === null) {
+                                return 'NO ASISTIÓ';
+                            }
+                            label += context.raw;
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 
@@ -944,57 +1048,13 @@ async function exportStatsToWord() {
 
     // 2. GENERACIÓN DE LA TABLA DE PROGRESIÓN INDIVIDUAL
     let progressionTableHtml = '';
+    
+    // A diferencia de la versión anterior, AHORA SOLO MOSTRAMOS EL RESUMEN.
+    // La gráfica de progresión se ve en pantalla con renderProgressionChart(records);
     if (isIndividual) {
-        let lastValidImc = 0;
-        
-        const trend = records.map((record, index) => {
-            const currentImc = parseFloat(record.imc);
-            const isNoAsistio = record.motivo === 'NO ASISTIÓ';
-            
-            let diff = 0;
-            let trendEmoji = "➖"; // Se mantiene
-            
-            // Lógica de Tendencia: Solo calcula si el IMC actual es válido
-            if (!isNoAsistio && lastValidImc > 0) {
-                diff = currentImc - lastValidImc;
-                if (diff > 0.1) trendEmoji = "⬆️"; // Sube
-                else if (diff < -0.1) trendEmoji = "⬇️"; // Baja
-            } else if (index === 0 && records.length > 1) {
-                // Primer registro de la serie, no hay diferencia
-                trendEmoji = "N/A"; 
-            } else if (isNoAsistio) {
-                trendEmoji = "N/A";
-            }
-            
-            // Actualizar el último IMC válido para la siguiente iteración
-            if (!isNoAsistio) {
-                lastValidImc = currentImc;
-            }
-
-            const motivoDisplay = isNoAsistio ? 'style="color: #991b1b; font-weight: bold;"' : '';
-            const imcDisplay = isNoAsistio ? 'N/A' : record.imc;
-            const difDisplay = isNoAsistio ? 'NO APLICA' : (index === 0 ? 'N/A' : diff.toFixed(1));
-
-            return `<tr>
-                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${record.fecha}</td>
-                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;" ${motivoDisplay}>${imcDisplay}</td>
-                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${difDisplay}</td>
-                <td style="padding: 6px; border: 1px solid #ccc; text-align: center; font-size: 18px;">${trendEmoji}</td>
-            </tr>`;
-        }).join('');
-
-        progressionTableHtml = `
-            <h3 style="font-size: 16px; margin-top: 20px; font-weight: bold; color: #008744;">TABLA DE PROGRESIÓN MENSUAL DE IMC</h3>
-            <table border="1" style="width: 50%; min-width: 400px; margin-top: 10px; border-collapse: collapse; font-family: 'Arial', sans-serif;">
-                <tr style="background-color: #2F4F4F; color: white;">
-                    <th style="padding: 6px;">FECHA</th>
-                    <th style="padding: 6px;">IMC</th>
-                    <th style="padding: 6px;">DIF. vs MES ANT.</th>
-                    <th style="padding: 6px;">TENDENCIA</th>
-                </tr>
-                ${trend}
-            </table>
-            <p style="font-size: 10px; margin-top: 5px;">⬆️=Sube >0.1 | ⬇️=Baja >0.1 | ➖=Se Mantiene</p>
+         progressionTableHtml = `
+            <h3 style="font-size: 16px; margin-top: 20px; font-weight: bold; color: #008744;">NOTA: VER GRÁFICO DE PROGRESIÓN EN PANTALLA</h3>
+            <p style="font-size: 12px; margin-top: 5px; color: #555;">Este reporte de Word solo incluye la tabla de resumen estadístico por ser un formato no compatible con gráficos dinámicos.</p>
         `;
     }
     
@@ -1047,15 +1107,44 @@ async function exportStatsToWord() {
     // LÓGICA DE DESCARGA
     const filename = `Reporte_Estadistico_SIMCEP_${isIndividual ? records[0].cip : 'Consolidado'}_${reportDate.replace(/\//g, '-')}.doc`;
     const blob = new Blob([htmlContent], { type: 'application/msword' });
-    const downloadUrl = URL.createObjectURL(blob); // <<-- CORREGIDO
+    const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = filename; // <<-- Agregado filename al link de descarga
+    link.download = filename; 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(downloadUrl);
     displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
+}
+
+// --- FUNCIÓN PARA DESCARGAR GRÁFICA COMO IMAGEN ---
+function downloadChartAsImage() {
+    const canvas = document.getElementById('bmiProgressionChart');
+    if (!canvas || !progressionChart) {
+        displayMessage('Error', 'No hay gráfico para descargar. Genere un reporte individual primero.', 'error');
+        return;
+    }
+    
+    // Configuración de descarga
+    const reportDate = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
+    // Intentar obtener el CIP del primer registro si está filtrado individualmente
+    const cip = currentFilteredRecords.length > 0 && currentFilteredRecords.every(r => r.cip === currentFilteredRecords[0].cip) ? currentFilteredRecords[0].cip : 'CONSOLIDADO';
+
+    const filename = `Progreso_IMC_${cip}_${reportDate}.png`;
+    
+    // Obtener la URL de la imagen del canvas
+    const imageURL = canvas.toDataURL('image/png'); 
+    
+    // Crear un enlace temporal para forzar la descarga
+    const a = document.createElement('a');
+    a.href = imageURL;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    displayMessage('ÉXITO', `Gráfica descargada como ${filename}.`, 'success');
 }
 
 
@@ -1240,6 +1329,7 @@ document.getElementById('export-word-button').addEventListener('click', exportTo
 // CONEXIÓN DEL BOTÓN EXCEL
 document.getElementById('export-excel-button').addEventListener('click', exportToExcel); 
 document.getElementById('export-stats-button').addEventListener('click', exportStatsToWord); // <<-- CONEXIÓN DEL BOTÓN ESTADÍSTICA
+document.getElementById('download-chart-button').addEventListener('click', downloadChartAsImage); // <<-- CONEXIÓN DEL BOTÓN DESCARGAR GRÁFICA
 
 document.getElementById('forgot-password-link').addEventListener('click', function(e) {
     e.preventDefault(); 

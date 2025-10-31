@@ -6,6 +6,9 @@
     <title>SIMCEP - Sistema de Índice de Masa Corporal del Ejército del Perú</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Incluir Chart.js (Necesario para generar el gráfico de línea) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+    
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"> 
@@ -94,7 +97,7 @@
             <div id="bmi-form-card" class="lg:col-span-2 card-tech">
                 <h2 class="text-2xl font-bold mb-6 flex items-center pb-3">
                     <i class="fas fa-ruler-vertical text-xl mr-3 text-color-primary-green"></i> CALCULADORA DE ÍNDICE DE MASA CORPORAL
-                </h2> 
+                </h2 > 
 
                 <form id="bmi-form" class="space-y-6">
                     <!-- INICIO DEL CAMBIO: De 3 a 4 columnas con PAB -->
@@ -364,6 +367,24 @@
                 </table>
             </div>
 
+            <!-- =========== SECCIÓN DE VISUALIZACIÓN DE GRÁFICAS (AÑADIDA) =========== -->
+            <div class="card-tech mb-10" id="stats-chart-card" style="display: none;">
+                <h3 class="text-xl font-bold text-color-accent-gold mb-4 flex justify-between items-center pb-2 border-b border-color-border">
+                    <span class="flex items-center">
+                        <i class="fas fa-chart-area mr-2 text-color-accent-lime"></i> GRÁFICO DE TENDENCIA DE IMC
+                    </span>
+                    <!-- BOTÓN DE DESCARGA DE GRÁFICA -->
+                    <button id="download-chart-button" class="btn-primary-tech btn-export text-sm bg-blue-500 hover:bg-blue-600">
+                        <i class="fas fa-download mr-2"></i> DESCARGAR GRÁFICA (PNG)
+                    </button>
+                </h3>
+                <!-- Contenedor para el gráfico de Chart.js -->
+                <div style="width: 90%; margin: 0 auto; height: 400px;">
+                    <canvas id="bmiProgressionChart"></canvas>
+                </div>
+            </div>
+            <!-- =========== FIN SECCIÓN DE GRÁFICAS =========== -->
+            
             <!-- =========== SECCIÓN DE GESTIÓN DE USUARIOS (MODIFICADA) =========== -->
             <div id="user-management-section" class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-16 col-span-full border-t-2 border-color-border pt-8">
 
