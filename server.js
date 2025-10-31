@@ -53,7 +53,6 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
             console.log("Tablas de base de datos listas. El servidor está listo para iniciar.");
 
             // *** CÓDIGO TEMPORAL: INSERCIÓN DE USUARIO SUPERADMIN POR DEFECTO ***
-            // DEBES ELIMINAR ESTO POR SEGURIDAD DESPUÉS DE CREAR TU USUARIO REAL
             const defaultPassword = 'superadmin'; 
             bcrypt.hash(defaultPassword, 10, (err, hash) => {
                 if (err) return console.error("Error al hashear contraseña inicial:", err.message);
@@ -72,8 +71,6 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 });
 
 
-// --- 4. RUTAS DE LA API PARA REGISTROS ---
-
 // Función auxiliar para la inserción de SQLite dentro de un Promise
 function dbRunPromise(sql, params) {
     return new Promise((resolve, reject) => {
@@ -83,6 +80,43 @@ function dbRunPromise(sql, params) {
         });
     });
 }
+
+// --- 4. RUTAS DE LA API PARA REGISTROS ---
+
+// [GET] /api/stats (NUEVA RUTA DE ESTADÍSTICAS AVANZADAS)
+app.get('/api/stats', (req, res) => {
+    // Filtros disponibles: cip, gguu, unidad, sexo, monthYear
+    const { cip, gguu, unidad, sexo, monthYear } = req.query; 
+
+    let sql = "SELECT * FROM records WHERE 1=1"; 
+    let params = [];
+
+    // Añadir filtros de identificación
+    if (cip) { sql += " AND cip = ?"; params.push(cip); }
+    if (gguu) { sql += " AND gguu = ?"; params.push(gguu); }
+    if (unidad) { sql += " AND unidad = ?"; params.push(unidad); }
+    if (sexo) { sql += " AND sexo = ?"; params.push(sexo); }
+    
+    // Añadir filtro mensual (para reportes agregados)
+    if (monthYear) {
+        // monthYear debe venir como MM/YYYY, buscamos el patrón '%/MM/YYYY'
+        const pattern = `%/${monthYear}`; 
+        sql += " AND fecha LIKE ?"; 
+        params.push(pattern);
+    }
+
+    // Ordenar por la fecha más antigua para ver la progresión
+    sql += " ORDER BY id ASC"; 
+
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (rows.length === 0) return res.status(404).json({ message: "No se encontraron datos que coincidan con los criterios de búsqueda." });
+        
+        // El frontend se encargará de procesar estos datos (agregados o individuales)
+        res.json(rows); 
+    });
+});
+
 
 // [GET] /api/records/check-monthly/:cip (RUTA DE UNICIDAD Y RELLENO)
 app.get('/api/records/check-monthly/:cip', (req, res) => {
@@ -149,7 +183,6 @@ app.get('/api/records/check-monthly/:cip', (req, res) => {
                     missingMonthsCount++;
                 } catch (error) {
                     console.error("Error al insertar registro faltante:", error);
-                    // Si falla la inserción de un mes, paramos el bucle.
                     break;
                 }
                 
@@ -251,8 +284,8 @@ app.delete('/api/records/:id', (req, res) => {
 
 // [POST] /api/export-excel (CORREGIDA: usa record.motivo para el Excel)
 app.post('/api/export-excel', async (req, res) => {
-    // ... (El código de exportación se mantiene sin cambios)
     try {
+        // ... (código de exportación inalterado)
         // RECIBIMOS EL OBJETO CON RECORDS Y REPORTMONTH
         const { records, reportMonth } = req.body; 
 
