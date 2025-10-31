@@ -33,6 +33,7 @@ function displayMessage(title, text, type) {
 
 
 // --- FUNCIONES PARA GESTIÓN DE USUARIOS (MEJORADAS) ---
+
 async function fetchAndDisplayUsers() {
     const tableBody = document.getElementById('users-table-body');
     try {
@@ -744,7 +745,7 @@ function renderProgressionChart(records) {
     const cipList = records.map(r => r.cip);
     const isIndividual = records.length > 0 && cipList.every((val, i, arr) => val === arr[0]);
     
-    // Si no es un reporte individual (consolidado), solo mostramos el resumen estático en el word
+    // Si no es un reporte individual (consolidado), ocultar la gráfica
     if (!isIndividual) {
         chartCard.style.display = 'none';
         return;
@@ -755,16 +756,11 @@ function renderProgressionChart(records) {
     // *** CORRECCIÓN DEL EJE X: Mes y Año completos ***
     const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     const labels = records.map(r => {
-        if (r.motivo === 'NO ASISTIÓ') {
-            const parts = r.fecha.split('/'); // 01/MM/YYYY
-            const monthIndex = parseInt(parts[1]) - 1;
-            const year = parts[2];
-            return `${monthNames[monthIndex]} ${year} (Ausente)`;
-        }
-        const parts = r.fecha.split('/'); // DD/MM/YYYY
+        const parts = r.fecha.split('/'); // DD/MM/YYYY o 01/MM/YYYY
         const monthIndex = parseInt(parts[1]) - 1;
         const year = parts[2];
-        return `${monthNames[monthIndex]} ${year}`;
+        const status = r.motivo === 'NO ASISTIÓ' ? ' (Ausente)' : '';
+        return `${monthNames[monthIndex]} ${year}${status}`;
     });
     
     // *** CORRECCIÓN DEL TÍTULO DE LA GRÁFICA ***
@@ -890,18 +886,30 @@ function renderTable(records) {
         const paClasificacionClass = paClasificacion === 'HIPERTENSION' ? 'text-red-500 font-bold' : (paClasificacion === 'PRE-HIPERTENSION' ? 'text-yellow-500' : 'text-color-primary-green');
         
         let actionButtons = '<span>N/A</span>';
-        if (currentUserRole === 'superadmin') {
-            // No permitir editar un registro de NO ASISTIÓ
+        
+        // Determinar si el usuario es Superadmin O Admin
+        const isSuperadmin = currentUserRole === 'superadmin';
+        const isAdmin = currentUserRole === 'admin' || isSuperadmin; 
+
+        if (isAdmin) {
+            // Un registro NO ASISTIÓ no debe ser editable por ningún rol
             const isNoAsistio = data.motivo === 'NO ASISTIÓ';
+
+            // El botón de EDICIÓN (Lápiz) está disponible para el ADMIN y SUPERADMIN
             const editButton = isNoAsistio ? 
                 '<button class="text-gray-500 text-lg mr-4" title="No se puede editar NO ASISTIÓ" disabled><i class="fas fa-pencil-alt"></i></button>' :
                 `<button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Editar Registro"><i class="fas fa-pencil-alt"></i></button>`;
                 
-            actionButtons = `${editButton}
-                <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
-            `;
+            actionButtons = editButton; 
+            
+            // El botón de ELIMINAR (Basurero) es SOLO para SUPERADMIN
+            if (isSuperadmin) {
+                 actionButtons += `
+                    <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                 `;
+            }
         }
         
         row.innerHTML = `
@@ -1010,67 +1018,6 @@ function exportToWord() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
-}
-
-
-// --- FUNCIÓN PARA EXPORTAR A EXCEL (LLAMA AL SERVIDOR) ---
-function exportToExcel() {
-    if (!isAuthenticated || currentFilteredRecords.length === 0) {
-        displayMessage('Error', 'No se puede exportar sin registros o sin autenticación.', 'error');
-        return;
-    }
-    
-    // CAPTURAR EL MES DEL REPORTE DEL NUEVO INPUT
-    const reportMonth = document.getElementById('input-report-month').value.toUpperCase();
-    
-    // Cambiar el texto del botón
-    const btn = document.getElementById('export-excel-button');
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> GENERANDO...';
-    btn.disabled = true;
-
-    fetch('/api/export-excel', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        // Enviamos los datos filtrados Y el mes del reporte al servidor
-        body: JSON.stringify({
-            records: currentFilteredRecords,
-            reportMonth: reportMonth 
-        })
-    })
-    .then(response => {
-        if (!response.ok) {
-            // Manejar errores del servidor (404, 500)
-            return response.json().then(error => { throw new Error(error.message || 'Error desconocido del servidor.'); });
-        }
-        // El servidor devuelve el archivo como un blob binario
-        return response.blob(); 
-    })
-    .then(blob => {
-        // Crear la URL del objeto y simular la descarga
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-        a.href = url;
-        a.download = `Reporte_SIMCEP_Mensual_${date}.xlsx`; // <-- Extension XLSX
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-
-        displayMessage('Exportación Exitosa', `Se ha generado el archivo .xlsx con formato.`, 'success');
-    })
-    .catch(error => {
-        console.error('Error en la descarga de Excel:', error);
-        displayMessage('Error de Exportación', `No se pudo generar el archivo: ${error.message}`, 'error');
-    })
-    .finally(() => {
-        // Restaurar el botón
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-    });
 }
 
 
