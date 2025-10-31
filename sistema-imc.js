@@ -1035,46 +1035,45 @@ async function fetchAndAutoFill(queryType, queryValue) {
         const response = await fetch(url);
         
         if (response.status === 404) {
-            document.getElementById('input-gguu').value = '';
-            document.getElementById('input-unidad').value = ''; // <<-- CORREGIDO: Limpiar UNIDAD
-            document.getElementById('input-userid').value = '';
-            document.getElementById('input-role').value = ''; // <<-- CORREGIDO: Limpiar GRADO
-            document.getElementById('input-sex-admin').value = 'Masculino';
-            document.getElementById('input-lastname').value = '';
-            document.getElementById('input-firstname').value = '';
-            document.getElementById('input-age-admin').value = '';
-            document.getElementById('input-dob').value = '';
+            // No encontrado: Mantenemos todos los datos ingresados y solo mostramos el mensaje.
             if (queryValue.length > 7) {
                 displayMessage('ATENCIÓN', `Paciente con ${queryType} ${queryValue} no encontrado. Ingrese datos manualmente.`, 'warning');
             }
-            return;
+            return; 
         }
         
         if (!response.ok) throw new Error('Error al buscar paciente.');
         
         const patientData = await response.json();
         
-        // Rellenar campos estáticos y de identificación
-        document.getElementById('input-gguu').value = patientData.gguu || '';
-        document.getElementById('input-unidad').value = patientData.unidad || ''; // <<-- CORREGIDO: Rellenar UNIDAD
-        document.getElementById('input-userid').value = patientData.cip || '';
+        // --- 1. AUTOCOMPLETADO DE CAMPOS DE IDENTIFICACIÓN Y ASIGNACIÓN (Estables) ---
+        // Se autocompletan: CIP, Nombre, Apellido, Sexo, DOB, GGUU, UNIDAD, GRADO
+        document.getElementById('input-gguu').value = patientData.gguu || '';     // <<-- Autocompletar GGUU
+        document.getElementById('input-unidad').value = patientData.unidad || ''; // <<-- Autocompletar UNIDAD
+        document.getElementById('input-userid').value = patientData.cip || '';   // Autocompletar CIP
+        document.getElementById('input-role').value = patientData.grado || '';   // <<-- Autocompletar GRADO
         document.getElementById('input-sex-admin').value = patientData.sexo || 'Masculino';
         document.getElementById('input-lastname').value = patientData.apellido || '';
         document.getElementById('input-firstname').value = patientData.nombre || '';
-        document.getElementById('input-role').value = patientData.grado || ''; // <<-- CORREGIDO: Rellenar GRADO
         
         // Rellenar edad y DOB
         document.getElementById('input-age-admin').value = patientData.edad || '';
-        // Si tienes la fecha de nacimiento, úsala para calcular la edad precisa y llenar el campo DOB
         if (patientData.fechaNacimiento) {
-            document.getElementById('input-dob').value = patientData.fechaNacimiento; // <<-- CORREGIDO: Autocompletar DOB
+            document.getElementById('input-dob').value = patientData.fechaNacimiento; // <<-- Autocompletar DOB
             const edadCalculada = calculateAge(patientData.fechaNacimiento);
             document.getElementById('input-age-admin').value = edadCalculada;
         } else {
              document.getElementById('input-dob').value = '';
         }
+
+        // --- 2. VACÍO DE CAMPOS VARIABLES (PESADA CLÍNICA) ---
+        // PA, PESO, ALTURA, PAB se dejan vacíos para el nuevo registro de pesada.
+        document.getElementById('input-pa').value = ''; 
+        document.getElementById('input-weight-admin').value = ''; 
+        document.getElementById('input-height-admin').value = ''; 
+        document.getElementById('input-pab').value = ''; 
         
-        displayMessage('ÉXITO', 'Datos del paciente cargados automáticamente.', 'success');
+        displayMessage('ÉXITO', 'Datos de identificación cargados automáticamente.', 'success');
 
     } catch (error) {
         console.error("Error en autocompletado:", error);
@@ -1083,38 +1082,23 @@ async function fetchAndAutoFill(queryType, queryValue) {
 
 function handleDNIInput(event) {
     const dni = event.target.value;
+    // Solo busca si es un DNI de 8 dígitos
     if (dni.length === 8 && /^\d+$/.test(dni)) {
         fetchAndAutoFill('DNI', dni);
-    } else if (dni.length === 0) {
-        // Lógica de limpieza al borrar todo
-        document.getElementById('input-gguu').value = '';
-        document.getElementById('input-unidad').value = ''; // <<-- CORREGIDO: Limpiar UNIDAD
-        document.getElementById('input-userid').value = '';
-        document.getElementById('input-role').value = ''; // <<-- CORREGIDO: Limpiar GRADO
-        document.getElementById('input-sex-admin').value = 'Masculino';
-        document.getElementById('input-lastname').value = '';
-        document.getElementById('input-firstname').value = '';
-        document.getElementById('input-age-admin').value = '';
-        document.getElementById('input-dob').value = '';
-    }
+    } 
+    // Si la entrada es borrada o incompleta, no hacer nada para mantener el registro manual
 }
 
-function handleCIPInput(event) {
-    const cip = event.target.value;
-    if (cip.length >= 8) { // Usamos una longitud mínima para evitar spamming en el servidor
-        fetchAndAutoFill('CIP', cip);
-    }
-}
+// <<-- FUNCIÓN handleCIPInput ELIMINADA y su escucha también
 
-
+// Lógica de Eventos para DNI/CIP
 document.getElementById('input-dni').addEventListener('blur', handleDNIInput);
-document.getElementById('input-userid').addEventListener('blur', handleCIPInput);
-document.getElementById('input-dni').addEventListener('input', (event) => {
-    if (event.target.value.length === 0) {
-        handleDNIInput(event); // Dispara la limpieza
-    }
-});
 
+// <<-- ELIMINADA la escucha del CIP
+// document.getElementById('input-userid').addEventListener('blur', handleCIPInput);
+
+// ELIMINAMOS la lógica del 'input' para evitar limpiezas accidentales al borrar DNI
+// document.getElementById('input-dni').addEventListener('input', ...);
 
 document.addEventListener('DOMContentLoaded', () => {
     updateUI();
