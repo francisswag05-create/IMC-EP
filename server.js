@@ -42,8 +42,8 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 nombre TEXT, edad INTEGER, peso REAL, altura REAL, 
                 imc REAL, fecha TEXT,
                 registradoPor TEXT,
-                motivo TEXT,               -- <<-- CAMBIO 1: AÑADIDO MOTIVO INAPTO
-                dob TEXT                   -- <<-- CAMBIO 2: AÑADIDO FECHA DE NACIMIENTO (DOB)
+                motivo TEXT,               -- AÑADIDO MOTIVO INAPTO
+                dob TEXT                   -- AÑADIDO FECHA DE NACIMIENTO (DOB)
             );
         `, (err) => {
             if (err) {
@@ -51,6 +51,22 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 process.exit(1);
             }
             console.log("Tablas de base de datos listas. El servidor está listo para iniciar.");
+
+            // *** CÓDIGO AÑADIDO: INSERCIÓN DE USUARIO SUPERADMIN POR DEFECTO ***
+            const defaultPassword = 'superadmin'; 
+            bcrypt.hash(defaultPassword, 10, (err, hash) => {
+                if (err) return console.error("Error al hashear contraseña inicial:", err.message);
+
+                // Intenta insertar el usuario, si ya existe por CIP (PRIMARY KEY) o EMAIL (UNIQUE), lo ignora.
+                db.run(`INSERT OR IGNORE INTO users (cip, fullName, password, role, email) VALUES (?, ?, ?, ?, ?)`, 
+                    ['ADMIN001', 'Super Administrador SIMCEP', hash, 'superadmin', 'admin@simcep.com'], 
+                    function(err) {
+                        if (err) console.error("Error al crear usuario inicial:", err.message);
+                        else if (this.changes > 0) console.log("✅ Usuario Super Admin Inicial creado (CIP: ADMIN001 | CLAVE: superadmin)");
+                    }
+                );
+            });
+            // *** FIN DEL CÓDIGO AÑADIDO ***
         });
     }
 });
@@ -76,8 +92,8 @@ app.get('/api/patient/:dni', (req, res) => {
             apellido: row.apellido,
             nombre: row.nombre,
             edad: row.edad, 
-            fechaNacimiento: row.dob, // <<-- CORREGIDO: Usar row.dob (Fecha de Nacimiento)
-            grado: row.grado          // <<-- AÑADIDO: Devolver el Grado
+            fechaNacimiento: row.dob, // Usar row.dob (Fecha de Nacimiento)
+            grado: row.grado          // Devolver el Grado
         });
     });
 });
@@ -227,7 +243,7 @@ app.post('/api/export-excel', async (req, res) => {
                 riesgoAEnf, // RIESGO A ENF SEGUN PABD
                 record.imc, // IMC
                 clasificacionIMC, // CLASIFICACION DE IMC
-                record.motivo || 'N/A', // MOTIVO <<-- USAR record.motivo
+                record.motivo || 'N/A', // MOTIVO 
                 digitadorDisplay // DIGITADOR
             ];
             
