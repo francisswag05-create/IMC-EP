@@ -389,7 +389,8 @@ function getAptitude(imc, sexo, pab, paString) {
         detalle, 
         clasificacionMINSA, 
         paClasificacion, 
-        riesgoAEnf 
+        riesgoAEnf,
+        motivoInapto: motivoInapto || 'APTO' // <<-- CORREGIDO: Devolver motivoInapto para Excel
     };
 }
 
@@ -544,6 +545,7 @@ function handleEditRecord(id) {
     document.getElementById('input-dni').value = recordToEdit.dni || '';
     document.getElementById('input-pa').value = recordToEdit.pa || '';
     document.getElementById('input-pab').value = recordToEdit.pab || '';
+    document.getElementById('input-dob').value = recordToEdit.dob || ''; // <<-- AÑADIDO: Cargar DOB para edición
 
     // CARGAR CAMPOS EXISTENTES
     document.getElementById('input-sex-admin').value = recordToEdit.sexo;
@@ -690,13 +692,14 @@ function filterTable() {
     // **** CORRECCIÓN CRÍTICA: AÑADIR DATOS CALCULADOS AL OBJETO ANTES DE ENVIARLO ****
     currentFilteredRecords = recordsToDisplay.map(record => {
         // Recalcular TODOS los campos de clasificación que el backend necesita
-        const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
+        const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(record.imc, record.sexo, record.pab, record.pa); // <<-- CAPTURAR motivoInapto
         return {
             ...record,
-            clasificacionMINSA: clasificacionMINSA, // <-- ESTO ES LO QUE EL BACKEND NECESITA
+            clasificacionMINSA: clasificacionMINSA,
             resultado: resultado,
             paClasificacion: paClasificacion,
-            riesgoAEnf: riesgoAEnf
+            riesgoAEnf: riesgoAEnf,
+            motivo: motivoInapto // <<-- AÑADIDO para ser usado en la exportación a Excel
         };
     });
     // *********************************************************************************
@@ -971,7 +974,7 @@ document.getElementById('admin-record-form').addEventListener('submit', function
     if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 0 && gguu && unidad && dni && pa) {
         const imc = calculateIMC(peso, altura);
         // LLAMADA A LA LÓGICA CLÍNICA COMPLETA
-        const { resultado, detalle, paClasificacion, riesgoAEnf } = getAptitude(imc, sexo, pab, pa); 
+        const { resultado, detalle, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(imc, sexo, pab, pa); // <<-- CORREGIDO: CAPTURAR motivoInapto
         
         const badgeClass = getSimplifiedAptitudeStyle(resultado);
         document.getElementById('admin-bmi-value').textContent = imc;
@@ -986,8 +989,8 @@ document.getElementById('admin-record-form').addEventListener('submit', function
         const digitadorFinal = `${currentAdminUser} (${adminRoleText} ${primerApellido})`; // <-- CORREGIDO
 
         if (isEditMode) {
-            // AÑADIR TODOS LOS CAMPOS
-            const updatedRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc };
+            // AÑADIR TODOS LOS CAMPOS (Motivo y DOB)
+            const updatedRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo: motivoInapto, dob: dob }; // <<-- CORREGIDO
             updateRecord(currentEditingRecordId, updatedRecord);
         } else {
             const now = new Date();
@@ -996,8 +999,8 @@ document.getElementById('admin-record-form').addEventListener('submit', function
             const year = now.getFullYear();
             const formattedDate = `${day}/${month}/${year}`;
             
-            // AÑADIR TODOS LOS CAMPOS
-            const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: digitadorFinal };
+            // AÑADIR TODOS LOS CAMPOS (Motivo y DOB)
+            const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: digitadorFinal, motivo: motivoInapto, dob: dob }; // <<-- CORREGIDO
             saveRecord(newRecord);
         }
     } else {
@@ -1033,7 +1036,9 @@ async function fetchAndAutoFill(queryType, queryValue) {
         
         if (response.status === 404) {
             document.getElementById('input-gguu').value = '';
+            document.getElementById('input-unidad').value = ''; // <<-- CORREGIDO: Limpiar UNIDAD
             document.getElementById('input-userid').value = '';
+            document.getElementById('input-role').value = ''; // <<-- CORREGIDO: Limpiar GRADO
             document.getElementById('input-sex-admin').value = 'Masculino';
             document.getElementById('input-lastname').value = '';
             document.getElementById('input-firstname').value = '';
@@ -1051,16 +1056,18 @@ async function fetchAndAutoFill(queryType, queryValue) {
         
         // Rellenar campos estáticos y de identificación
         document.getElementById('input-gguu').value = patientData.gguu || '';
+        document.getElementById('input-unidad').value = patientData.unidad || ''; // <<-- CORREGIDO: Rellenar UNIDAD
         document.getElementById('input-userid').value = patientData.cip || '';
         document.getElementById('input-sex-admin').value = patientData.sexo || 'Masculino';
         document.getElementById('input-lastname').value = patientData.apellido || '';
         document.getElementById('input-firstname').value = patientData.nombre || '';
+        document.getElementById('input-role').value = patientData.grado || ''; // <<-- CORREGIDO: Rellenar GRADO
         
-        // Rellenar edad
+        // Rellenar edad y DOB
         document.getElementById('input-age-admin').value = patientData.edad || '';
         // Si tienes la fecha de nacimiento, úsala para calcular la edad precisa y llenar el campo DOB
         if (patientData.fechaNacimiento) {
-            document.getElementById('input-dob').value = patientData.fechaNacimiento;
+            document.getElementById('input-dob').value = patientData.fechaNacimiento; // <<-- CORREGIDO: Autocompletar DOB
             const edadCalculada = calculateAge(patientData.fechaNacimiento);
             document.getElementById('input-age-admin').value = edadCalculada;
         } else {
@@ -1081,7 +1088,9 @@ function handleDNIInput(event) {
     } else if (dni.length === 0) {
         // Lógica de limpieza al borrar todo
         document.getElementById('input-gguu').value = '';
+        document.getElementById('input-unidad').value = ''; // <<-- CORREGIDO: Limpiar UNIDAD
         document.getElementById('input-userid').value = '';
+        document.getElementById('input-role').value = ''; // <<-- CORREGIDO: Limpiar GRADO
         document.getElementById('input-sex-admin').value = 'Masculino';
         document.getElementById('input-lastname').value = '';
         document.getElementById('input-firstname').value = '';
