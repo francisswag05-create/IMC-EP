@@ -97,7 +97,7 @@
             <div id="bmi-form-card" class="lg:col-span-2 card-tech">
                 <h2 class="text-2xl font-bold mb-6 flex items-center pb-3">
                     <i class="fas fa-ruler-vertical text-xl mr-3 text-color-primary-green"></i> CALCULADORA DE ÍNDICE DE MASA CORPORAL
-                </h2 > 
+                </h2> 
 
                 <form id="bmi-form" class="space-y-6">
                     <!-- INICIO DEL CAMBIO: De 3 a 4 columnas con PAB -->
@@ -318,40 +318,41 @@
                 </div>
                 
                 <div>
-                    <label for="age-filter" class="label-tech inline-block mb-1">Buscar por Edad:</label>
-                    <input type="number" id="age-filter" placeholder="Ej: 45" min="18" max="100" class="input-tech text-sm w-24">
-                </div>
-                
-                <!-- Filtro por Aptitud (Eliminada opción 'APTO (MONITOREO)') -->
-                <div>
-                    <label for="aptitude-filter" class="label-tech inline-block mb-1">Filtrar por Aptitud:</label>
-                    <select id="aptitude-filter" class="input-tech text-sm w-48">
-                        <option value="">Todas las Aptitudes</option>
-                        <option value="APTO">APTO</option>
-                        <option value="INAPTO">INAPTO</option>
-                    </select>
-                </div>
-                <!-- FIN Filtro por Aptitud -->
-                
-                <!-- INPUT MES DE REPORTE AÑADIDO AQUÍ -->
-                <div class="min-w-[150px]">
-                    <label for="input-report-month" class="label-tech inline-block mb-1">Mes del Reporte:</label>
-                    <input type="text" id="input-report-month" placeholder="Ej: DICIEMBRE" class="input-tech text-sm w-full" value="MES DE REPORTE">
-                </div>
-                <!-- FIN INPUT MES DE REPORTE -->
-                
-                <div class="ml-auto flex items-end gap-4">
-                    <button id="export-stats-button" class="btn-primary-tech btn-export text-sm bg-purple-600 hover:bg-purple-700 text-white shadow-lg">
-                        <i class="fas fa-chart-line mr-2"></i> EXPORTAR ESTADÍSTICA
-                    </button>
-                    <button id="export-excel-button" class="btn-primary-tech btn-export text-sm bg-color-primary-green hover:bg-green-700 text-white shadow-lg">
-                        <i class="fas fa-file-excel mr-2"></i> EXPORTAR A EXCEL
-                    </button>
-                    <button id="export-word-button" class="btn-primary-tech btn-export text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-lg">
-                        <i class="fas fa-file-word mr-2"></i> EXPORTAR A WORD
-                    </button>
-                </div>
-            </div>
+                            <label for="age-filter" class="label-tech inline-block mb-1">Buscar por Edad:</label>
+                            <input type="number" id="age-filter" placeholder="Ej: 45" min="18" max="100" class="input-tech text-sm w-24">
+                        </div>
+                        
+                        <!-- Filtro por Aptitud (Eliminada opción 'APTO (MONITOREO)') -->
+                        <div>
+                            <label for="aptitude-filter" class="label-tech inline-block mb-1">Filtrar por Aptitud:</label>
+                            <select id="aptitude-filter" class="input-tech text-sm w-48">
+                                <option value="">Todas las Aptitudes</option>
+                                <option value="APTO">APTO</option>
+                                <option value="INAPTO">INAPTO</option>
+                            </select>
+                        </div>
+                        <!-- FIN Filtro por Aptitud -->
+                        
+                        <!-- INPUT MES DE REPORTE AÑADIDO AQUÍ -->
+                        <div class="min-w-[150px]">
+                            <label for="input-report-month" class="label-tech inline-block mb-1">Mes del Reporte:</label>
+                            <input type="text" id="input-report-month" placeholder="Ej: DICIEMBRE" class="input-tech text-sm w-full" value="MES DE REPORTE">
+                        </div>
+                        <!-- FIN INPUT MES DE REPORTE -->
+                        
+                        <div class="ml-auto flex items-end gap-4">
+                            <!-- Botón de Exportar Estadística: No se borra, se reconecta -->
+                            <button id="export-stats-button" class="btn-primary-tech btn-export text-sm bg-purple-600 hover:bg-purple-700 text-white shadow-lg">
+                                <i class="fas fa-chart-line mr-2"></i> VER GRÁFICA PROGRESIÓN
+                            </button>
+                            <button id="export-excel-button" class="btn-primary-tech btn-export text-sm bg-color-primary-green hover:bg-green-700 text-white shadow-lg">
+                                <i class="fas fa-file-excel mr-2"></i> EXPORTAR A EXCEL
+                            </button>
+                            <button id="export-word-button" class="btn-primary-tech btn-export text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-lg">
+                                <i class="fas fa-file-word mr-2"></i> EXPORTAR A WORD
+                            </button>
+                        </div>
+                    </div>
             <!-- FIN DE FILTROS Y BOTONES MODIFICADOS -->
 
             <div class="overflow-x-auto table-container rounded-xl shadow-2xl p-2 col-span-full">
@@ -368,7 +369,7 @@
             </div>
 
             <!-- =========== SECCIÓN DE VISUALIZACIÓN DE GRÁFICAS (AÑADIDA) =========== -->
-            <div class="card-tech mb-10" id="stats-chart-card" style="display: none;">
+            <div class="card-tech mb-10 mt-6" id="stats-chart-card" style="display: none;">
                 <h3 class="text-xl font-bold text-color-accent-gold mb-4 flex justify-between items-center pb-2 border-b border-color-border">
                     <span class="flex items-center">
                         <i class="fas fa-chart-area mr-2 text-color-accent-lime"></i> GRÁFICO DE TENDENCIA DE IMC
