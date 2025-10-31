@@ -796,84 +796,126 @@ function renderTable(records) {
     });
 }
 
-function exportToWord() {
-    if (!isAuthenticated) {
-        displayMessage('Acceso Denegado', 'Debe iniciar sesión para exportar.', 'error');
-        return;
-    }
-    if (currentFilteredRecords.length === 0) {
-        displayMessage('Sin Datos', 'No hay registros para exportar.', 'warning');
+// --- FUNCIÓN PARA PROCESAR Y EXPORTAR DATOS ESTADÍSTICOS ---
+function processAndExportStats(records) {
+    if (records.length === 0) {
+        displayMessage('Sin Datos', 'No hay registros para generar estadísticas.', 'warning');
         return;
     }
     
-    // --- ESTILOS OPTIMIZADOS PARA WORD (MÁS COMPACTOS) ---
-    // Ajustado a 4px de padding para máxima compacidad y fuente pequeña
-    const tableHeaderStyle = "background-color: #2F4F4F; color: white; padding: 4px; text-align: center; font-size: 10px; border: 1px solid #111; font-weight: bold; border-collapse: collapse; white-space: nowrap; font-family: 'Arial', sans-serif;";
-    const cellStyle = "padding: 4px; text-align: center; font-size: 10px; border: 1px solid #ccc; vertical-align: middle; border-collapse: collapse; font-family: 'Arial', sans-serif;";
-    const inaptoTextStyle = 'style="color: #991b1b; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"'; // Rojo oscuro
-    const aptoTextStyle = 'style="color: #065f46; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"'; // Verde oscuro
-    const titleStyle = "text-align: center; color: #1e3a8a; font-size: 20px; margin-bottom: 5px; font-weight: bold; font-family: 'Arial', sans-serif;";
-    const subtitleStyle = "text-align: center; font-size: 14px; margin-bottom: 20px; font-family: 'Arial', sans-serif;";
+    // 1. OBTENER INFORMACIÓN BASE (del primer registro, si es individual)
+    const isIndividual = records.every(r => r.cip === records[0].cip) && records.length > 0;
+    const reportTitle = isIndividual 
+        ? `REPORTE DE PROGRESIÓN DE IMC DEL PERSONAL: ${records[0].apellido}, ${records[0].nombre}`
+        : "REPORTE ESTADÍSTICO CONSOLIDADO DE PESADA";
+    
+    const subtitleText = isIndividual ? `CIP: ${records[0].cip} | UNIDAD: ${records[0].unidad}` : `Registros Analizados: ${records.length}`;
+
+    // 2. GENERACIÓN DE LA TABLA DE PROGRESIÓN INDIVIDUAL
+    let progressionTableHtml = '';
+    if (isIndividual) {
+        let lastImc = 0; // Usaremos 0 para el primer registro
+        let lastValidImc = 0;
+        
+        const trend = records.map((record, index) => {
+            const currentImc = parseFloat(record.imc);
+            const isNoAsistio = record.motivo === 'NO ASISTIÓ';
+            
+            let diff = 0;
+            let trendEmoji = "➖"; // Se mantiene
+            
+            // Lógica de Tendencia: Solo calcula si el IMC actual es válido
+            if (!isNoAsistio && lastValidImc > 0) {
+                diff = currentImc - lastValidImc;
+                if (diff > 0.1) trendEmoji = "⬆️"; // Sube
+                else if (diff < -0.1) trendEmoji = "⬇️"; // Baja
+            } else if (index === 0 && records.length > 1) {
+                // Primer registro de la serie, no hay diferencia
+                trendEmoji = "N/A"; 
+            } else if (isNoAsistio) {
+                trendEmoji = "N/A";
+            }
+            
+            // Actualizar el último IMC válido para la siguiente iteración
+            if (!isNoAsistio) {
+                lastValidImc = currentImc;
+            }
+
+            const motivoDisplay = isNoAsistio ? 'style="color: #991b1b; font-weight: bold;"' : '';
+            const imcDisplay = isNoAsistio ? 'N/A' : record.imc;
+            const difDisplay = isNoAsistio ? 'NO APLICA' : (index === 0 ? 'N/A' : diff.toFixed(1));
+
+            return `<tr>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${record.fecha}</td>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;" ${motivoDisplay}>${imcDisplay}</td>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: center;">${difDisplay}</td>
+                <td style="padding: 6px; border: 1px solid #ccc; text-align: center; font-size: 18px;">${trendEmoji}</td>
+            </tr>`;
+        }).join('');
+
+        progressionTableHtml = `
+            <h3 style="font-size: 16px; margin-top: 20px; font-weight: bold; color: #008744;">TABLA DE PROGRESIÓN MENSUAL DE IMC</h3>
+            <table border="1" style="width: 50%; min-width: 400px; margin-top: 10px; border-collapse: collapse; font-family: 'Arial', sans-serif;">
+                <tr style="background-color: #2F4F4F; color: white;">
+                    <th style="padding: 6px;">FECHA</th>
+                    <th style="padding: 6px;">IMC</th>
+                    <th style="padding: 6px;">DIF. vs MES ANT.</th>
+                    <th style="padding: 6px;">TENDENCIA</th>
+                </tr>
+                ${trend}
+            </table>
+            <p style="font-size: 10px; margin-top: 5px;">⬆️=Sube >0.1 | ⬇️=Baja >0.1 | ➖=Se Mantiene</p>
+        `;
+    }
+    
+    // 3. RESUMEN ESTADÍSTICO CONSOLIDADO (Aplica para Individual y Grupo)
+    const totalRegistrosValidos = records.filter(r => r.motivo !== 'NO ASISTIÓ').length;
+    const totalApto = records.filter(r => r.resultado && r.resultado.startsWith('APTO') && r.motivo !== 'NO ASISTIÓ').length;
+    const totalInapto = records.filter(r => r.resultado && r.resultado.startsWith('INAPTO') && r.motivo !== 'NO ASISTIÓ').length;
+    const totalNoAsistio = records.filter(r => r.motivo === 'NO ASISTIÓ').length;
+
+    const porcentajeApto = totalRegistrosValidos > 0 ? ((totalApto / totalRegistrosValidos) * 100).toFixed(1) : 0;
+    const porcentajeInapto = totalRegistrosValidos > 0 ? ((totalInapto / totalRegistrosValidos) * 100).toFixed(1) : 0;
+
+
+    const statsSummaryHtml = `
+        <h3 style="font-size: 16px; margin-top: 30px; font-weight: bold; color: #008744;">RESUMEN DE APTITUD</h3>
+        <table border="1" style="width: 50%; min-width: 400px; margin-top: 10px; border-collapse: collapse; font-family: 'Arial', sans-serif;">
+            <tr style="background-color: #f0f0f0;">
+                <td style="padding: 6px; width: 30%;">Total Registros Válidos (con Pesada)</td>
+                <td style="padding: 6px; text-align: center;">${totalRegistrosValidos}</td>
+            </tr>
+            <tr style="background-color: #c8e6c9;">
+                <td style="padding: 6px;">Total APTO (Válido)</td>
+                <td style="padding: 6px; text-align: center; font-weight: bold;">${totalApto} (${porcentajeApto}%)</td>
+            </tr>
+            <tr style="background-color: #ffcdd2;">
+                <td style="padding: 6px;">Total INAPTO (Válido)</td>
+                <td style="padding: 6px; text-align: center; font-weight: bold;">${totalInapto} (${porcentajeInapto}%)</td>
+            </tr>
+            <tr style="background-color: #fff3c9;">
+                <td style="padding: 6px;">Total NO ASISTIÓ</td>
+                <td style="padding: 6px; text-align: center; font-weight: bold;">${totalNoAsistio}</td>
+            </tr>
+        </table>
+    `;
+
+    // 4. GENERACIÓN DEL DOCUMENTO WORD FINAL
     const reportDate = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP Estadístico</title><style>body { font-family: Arial, sans-serif; }</style></head><body>`;
     
-    // --- GENERACIÓN DE CONTENIDO HTML OPTIMIZADO ---
-    let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP</title><style>body { font-family: Arial, sans-serif; } table { border-collapse: collapse; width: 100%; margin: 20px auto; } td, th { border-collapse: collapse; }</style></head><body>`;
-    
-    // CABECERA
-    htmlContent += `<div style="text-align: center; width: 100%;">
-        <h1 style="${titleStyle}">REPORTE DE ÍNDICE DE MASA CORPORAL (SIMCEP)</h1>
-        <p style="${subtitleStyle}">Fecha de Generación: ${reportDate} | Registros Filtrados: ${currentFilteredRecords.length}</p>
+    htmlContent += `<div style="text-align: center; font-family: 'Arial', sans-serif;">
+        <h1 style="color: #FFD700; font-size: 20px; margin-bottom: 5px;">${reportTitle}</h1>
+        <p style="font-size: 12px; margin-bottom: 20px;">${subtitleText} | Generado el: ${reportDate}</p>
     </div>`;
 
-    // INICIO DE LA TABLA
-    htmlContent += `<table border="1" style="width: 100%;"><thead><tr>
-        <th style="${tableHeaderStyle}; width: 10%;">UNIDAD</th>
-        <th style="${tableHeaderStyle}; width: 10%;">GRADO</th>
-        <th style="${tableHeaderStyle}; width: 25%;">APELLIDOS Y NOMBRES</th>
-        <th style="${tableHeaderStyle}; width: 8%;">EDAD</th>
-        <th style="${tableHeaderStyle}; width: 8%;">PESO (kg)</th>
-        <th style="${tableHeaderStyle}; width: 8%;">TALLA (m)</th>
-        <th style="${tableHeaderStyle}; width: 8%;">IMC</th>
-        <th style="${tableHeaderStyle}; width: 23%;">CLASIFICACIÓN</th>
-    </tr></thead><tbody>`;
+    htmlContent += progressionTableHtml;
+    htmlContent += statsSummaryHtml;
     
-    // FILAS DE DATOS
-    currentFilteredRecords.forEach(record => {
-        // Obtenemos el resultado completo para el detalle y la clasificación MINSA
-        const { resultado, clasificacionMINSA } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
-        
-        // Determinar el estilo de color (APTO=Verde, INAPTO=Rojo)
-        const textStyleTag = resultado.startsWith('INAPTO') ? inaptoTextStyle : aptoTextStyle;
-        const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
-        
-        // CLASIFICACIÓN SIMPLIFICADA: SOLO MUESTRA EL TEXTO (ej: NORMAL)
-        let clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
-        
-        htmlContent += `<tr>
-            <td style="${cellStyle}">${record.unidad || 'N/A'}</td>
-            <td style="${cellStyle}">${record.grado || 'N/A'}</td>
-            <td style="${nameCellStyle}">${(record.apellido || 'N/A').toUpperCase()}, ${record.nombre || 'N/A'}</td>
-            <td style="${cellStyle}">${record.edad || 'N/A'}</td>
-            <td style="${cellStyle}">${record.peso || 'N/A'}</td>
-            <td style="${cellStyle}">${record.altura || 'N/A'}</td>
-            <td style="${cellStyle} font-weight: bold;">${record.imc || 'N/A'}</td>
-            <td style="${cellStyle}" ${textStyleTag}>${clasificacionDisplay}</td> <!-- Muestra solo Clasificación con color de Aptitud -->
-        </tr>`;
-    });
-    
-    // CIERRE DE LA TABLA Y PIE DE PÁGINA
-    htmlContent += `</tbody></table>
-    <div style="margin: 40px auto 0 auto; width: 95%; text-align: center; border: none; font-family: 'Arial', sans-serif;">
-        <h4 style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #1e3a8a;">LEYES DE CLASIFICACIÓN CLÍNICA (SIMCEP)</h4>
-        <p style="font-size: 10px; margin: 5px 0; text-align: left; padding-left: 10%;">
-            *La Aptitud se rige por el IMC y el Perímetro Abdominal (PAB) según directrices de la OMS/Internas. 
-            El INAPTO es anulado a APTO si el PAB cae en el rango de excepción.
-        </p>
-    </div></body></html>`;
+    htmlContent += `</body></html>`;
 
-    // --- LÓGICA DE DESCARGA ---
-    const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-    const filename = `Reporte_SIMCEP_IMC_Word_${date}.doc`;
+    // LÓGICA DE DESCARGA
+    const filename = `Reporte_Estadistico_SIMCEP_${isIndividual ? records[0].cip : 'Consolidado'}_${reportDate.replace(/\//g, '-')}.doc`;
     const blob = new Blob([htmlContent], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -886,64 +928,56 @@ function exportToWord() {
 }
 
 
-// --- FUNCIÓN PARA EXPORTAR A EXCEL (LLAMA AL SERVIDOR) ---
-function exportToExcel() {
-    if (!isAuthenticated || currentFilteredRecords.length === 0) {
-        displayMessage('Error', 'No se puede exportar sin registros o sin autenticación.', 'error');
+// --- FUNCIÓN PRINCIPAL PARA EL BOTÓN DE ESTADÍSTICAS ---
+async function exportStatsToWord() {
+    if (!isAuthenticated) {
+        displayMessage('Acceso Denegado', 'Debe iniciar sesión para operar.', 'error');
         return;
     }
     
-    // CAPTURAR EL MES DEL REPORTE DEL NUEVO INPUT
-    const reportMonth = document.getElementById('input-report-month').value.toUpperCase();
+    // Usaremos los filtros actualmente visibles en la tabla como base para el reporte
+    let records;
+    let url = '/api/stats?';
+    let params = [];
     
-    // Cambiar el texto del botón
-    const btn = document.getElementById('export-excel-button');
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> GENERANDO...';
-    btn.disabled = true;
-
-    fetch('/api/export-excel', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        // Enviamos los datos filtrados Y el mes del reporte al servidor
-        body: JSON.stringify({
-            records: currentFilteredRecords,
-            reportMonth: reportMonth 
-        })
-    })
-    .then(response => {
-        if (!response.ok) {
-            // Manejar errores del servidor (404, 500)
-            return response.json().then(error => { throw new Error(error.message || 'Error desconocido del servidor.'); });
+    // Prioridad: Reporte Individual (Si el filtro de nombre/cip tiene 8+ caracteres)
+    const filterCip = document.getElementById('name-filter').value.trim();
+    if (filterCip.length >= 8 && /^\d+$/.test(filterCip)) {
+         params.push(`cip=${filterCip}`);
+    } 
+    
+    // Si NO es un reporte individual estricto, aplicamos los filtros de la tabla para un consolidado
+    if (params.length === 0) {
+        // Recoger filtros agregados
+        const filterMonth = document.getElementById('month-filter').value;
+        const filterAptitude = document.getElementById('aptitude-filter').value; // Aunque no lo usaremos en el API, es parte de los filtros del usuario
+        
+        // Si no hay filtros, usar los registros actuales filtrados
+        if (currentFilteredRecords.length === 0) {
+             displayMessage('Sin Datos', 'No hay registros visibles en la tabla para generar estadística. Ajuste los filtros.', 'warning');
+             return;
         }
-        // El servidor devuelve el archivo como un blob binario
-        return response.blob(); 
-    })
-    .then(blob => {
-        // Crear la URL del objeto y simular la descarga
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-        a.href = url;
-        a.download = `Reporte_SIMCEP_Mensual_${date}.xlsx`; // <-- Extension XLSX
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
+        
+        records = currentFilteredRecords;
 
-        displayMessage('Exportación Exitosa', `Se ha generado el archivo .xlsx con formato.`, 'success');
-    })
-    .catch(error => {
-        console.error('Error en la descarga de Excel:', error);
-        displayMessage('Error de Exportación', `No se pudo generar el archivo: ${error.message}`, 'error');
-    })
-    .finally(() => {
-        // Restaurar el botón
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-    });
+    } else {
+        // Llama al servidor con el filtro CIP
+        try {
+            const response = await fetch(url + params.join('&'));
+             if (!response.ok) {
+                 const errorData = await response.json();
+                 throw new Error(errorData.message || 'No se encontraron registros para este CIP en la base de datos.');
+             }
+             records = await response.json();
+        } catch (error) {
+             console.error("Error en la exportación de estadísticas:", error);
+             displayMessage('Error de Exportación', `No se pudo generar el reporte estadístico: ${error.message}`, 'error');
+             return;
+        }
+    }
+    
+    // Ejecutar el procesamiento y la generación de Word
+    processAndExportStats(records);
 }
 
 
