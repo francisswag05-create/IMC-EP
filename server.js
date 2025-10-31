@@ -52,8 +52,8 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
             }
             console.log("Tablas de base de datos listas. El servidor está listo para iniciar.");
 
-            // *** CÓDIGO AÑADIDO: INSERCIÓN DE USUARIO SUPERADMIN POR DEFECTO ***
-            // IMPORTANTE: Modifica estos datos DESPUÉS de hacer un 'fly deploy' exitoso.
+            // *** CÓDIGO TEMPORAL: INSERCIÓN DE USUARIO SUPERADMIN POR DEFECTO ***
+            // DEBES ELIMINAR ESTO POR SEGURIDAD DESPUÉS DE CREAR TU USUARIO REAL
             const defaultPassword = 'superadmin'; 
             bcrypt.hash(defaultPassword, 10, (err, hash) => {
                 if (err) return console.error("Error al hashear contraseña inicial:", err.message);
@@ -66,7 +66,7 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                     }
                 );
             });
-            // *** FIN DEL CÓDIGO AÑADIDO ***
+            // *** FIN DEL CÓDIGO TEMPORAL ***
         });
     }
 });
@@ -74,35 +74,96 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 // --- 4. RUTAS DE LA API PARA REGISTROS ---
 
-// [GET] /api/records/check-monthly/:cip (NUEVA RUTA DE UNICIDAD MENSUAL)
+// Función auxiliar para la inserción de SQLite dentro de un Promise
+function dbRunPromise(sql, params) {
+    return new Promise((resolve, reject) => {
+        db.run(sql, params, function(err) {
+            if (err) reject(err);
+            else resolve(this);
+        });
+    });
+}
+
+// [GET] /api/records/check-monthly/:cip (RUTA DE UNICIDAD Y RELLENO)
 app.get('/api/records/check-monthly/:cip', (req, res) => {
     const { cip } = req.params;
-    
-    // Calcula el patrón de mes/año (Ej: '10/2025')
+
     const now = new Date();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
-    const monthYear = `${currentMonth}/${currentYear}`;
-
-    // Patrón para buscar en el campo 'fecha' (Ej: '%/10/2025')
-    // Esto coincide con cualquier día en el mes y año
-    const pattern = `%/${monthYear}`; 
-
-    const sql = "SELECT id FROM records WHERE cip = ? AND fecha LIKE ?"; 
+    const currentMonthYear = `${String(currentMonth).padStart(2, '0')}/${currentYear}`;
     
-    db.get(sql, [cip, pattern], (err, row) => {
-        if (err) {
-            console.error("Error en validación mensual:", err.message);
-            return res.status(500).json({ error: "Error al validar registro mensual." });
+    // --- 1. BUSCAR EL REGISTRO MÁS RECIENTE ---
+    db.get("SELECT * FROM records WHERE cip = ? ORDER BY id DESC LIMIT 1", [cip], async (err, lastRecord) => {
+        if (err) return res.status(500).json({ error: "Error al buscar último registro." });
+        
+        let missingMonthsCount = 0;
+
+        // --- 2. VERIFICAR SI HAY REGISTROS EN EL MES ACTUAL ---
+        if (lastRecord && lastRecord.fecha && lastRecord.fecha.includes(currentMonthYear)) {
+            return res.json({ alreadyRecorded: true, message: `El CIP ${cip} ya tiene un registro para el mes de ${currentMonthYear}.` });
         }
         
-        if (row) {
-            // Ya existe un registro para este CIP en el mes
-            return res.json({ alreadyRecorded: true, message: `El CIP ${cip} ya tiene un registro para el mes de ${currentMonth}/${currentYear}.` });
-        } else {
-            // No existe registro
-            return res.json({ alreadyRecorded: false });
+        // --- 3. RELLENO DE REGISTROS FALTANTES ---
+        if (lastRecord) {
+            // Obtener el mes y año del último registro
+            const lastDateParts = lastRecord.fecha.split('/');
+            let lastMonth = parseInt(lastDateParts[1]);
+            let lastYear = parseInt(lastDateParts[2]);
+
+            // Crear un objeto de fecha para el mes siguiente al último registro
+            let checkDate = new Date(lastYear, lastMonth, 1); // lastMonth es 0-indexed, así que el mes siguiente es correcto
+
+            // Bucle para crear registros 'NO ASISTIÓ'
+            while (
+                checkDate.getTime() < now.getTime() && // Asegurarse de que no sea el mes actual
+                (checkDate.getMonth() + 1 !== currentMonth || checkDate.getFullYear() !== currentYear)
+            ) {
+                const missingMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
+                const missingYear = checkDate.getFullYear();
+                const missingDate = `01/${missingMonth}/${missingYear}`;
+                
+                // Crea un nuevo registro de 'NO ASISTIÓ'
+                const missingRecord = {
+                    ...lastRecord,
+                    id: null, // Dejar que la DB asigne un nuevo ID
+                    fecha: missingDate,
+                    peso: 0, altura: 0.01, imc: 0, pab: 0, // Altura en 0.01 para evitar divisiones por cero en el frontend
+                    pa: 'N/A', paClasificacion: 'N/A', riesgoAEnf: 'N/A',
+                    motivo: 'NO ASISTIÓ', 
+                    registradoPor: 'SISTEMA (NO ASISTIÓ)', 
+                    edad: lastRecord.edad // Usar la última edad conocida
+                };
+                
+                // LÍNEA DE INSERCIÓN (SQL con 20 campos)
+                const sql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                
+                try {
+                    await dbRunPromise(sql, [
+                        missingRecord.gguu, missingRecord.unidad, missingRecord.dni, missingRecord.pa, 
+                        missingRecord.pab, missingRecord.paClasificacion, missingRecord.riesgoAEnf, 
+                        missingRecord.sexo, missingRecord.cip, missingRecord.grado, missingRecord.apellido, 
+                        missingRecord.nombre, missingRecord.edad, missingRecord.peso, missingRecord.altura, 
+                        missingRecord.imc, missingRecord.fecha, missingRecord.registradoPor, missingRecord.motivo, missingRecord.dob
+                    ]);
+                    missingMonthsCount++;
+                } catch (error) {
+                    console.error("Error al insertar registro faltante:", error);
+                    // Si falla la inserción de un mes, paramos el bucle.
+                    break;
+                }
+                
+                // Avanzar al siguiente mes
+                checkDate.setMonth(checkDate.getMonth() + 1);
+            }
         }
+        
+        // --- 4. RESPUESTA FINAL (Permitir el Guardado) ---
+        return res.json({ 
+            alreadyRecorded: false, 
+            missingRecordsCreated: missingMonthsCount > 0, 
+            count: missingMonthsCount 
+        });
     });
 });
 
@@ -190,6 +251,7 @@ app.delete('/api/records/:id', (req, res) => {
 
 // [POST] /api/export-excel (CORREGIDA: usa record.motivo para el Excel)
 app.post('/api/export-excel', async (req, res) => {
+    // ... (El código de exportación se mantiene sin cambios)
     try {
         // RECIBIMOS EL OBJETO CON RECORDS Y REPORTMONTH
         const { records, reportMonth } = req.body; 

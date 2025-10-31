@@ -254,7 +254,9 @@ function calculateIMC(weight, height) {
         const imc = weight / (height * height);
         return imc.toFixed(1);
     }
-    return 0;
+    // NOTA: Usamos 0.01 de altura para registros "NO ASISTIÓ" en el backend,
+    // por lo que este valor debe ser seguro para la división.
+    return 0; 
 }
 
 // NUEVA FUNCIÓN PARA CALCULAR EDAD A PARTIR DE DOB
@@ -274,6 +276,9 @@ function calculateAge(dateOfBirth) {
 // --- NUEVA FUNCIÓN PARA CLASIFICAR PRESIÓN ARTERIAL (CLASIFICACION) ---
 function getClassificacionPA(paString) {
     if (!paString || !paString.includes('/')) return 'N/A';
+    // Si el valor es N/A (como en NO ASISTIÓ), devolver N/A
+    if (paString === 'N/A') return 'N/A';
+
     const [sistolicaStr, diastolicaStr] = paString.split('/');
     const sistolica = parseInt(sistolicaStr);
     const diastolica = parseInt(diastolicaStr);
@@ -289,6 +294,8 @@ function getClassificacionPA(paString) {
 // --- Función getRiskByWaist (RIESGO A ENF SEGUN PAB - AJUSTADO A CUADRO 2 OMS) ---
 function getRiskByWaist(sexo, pab) {
     const pabFloat = parseFloat(pab);
+    if (pabFloat === 0) return 'N/A'; // Para registros NO ASISTIÓ
+
     if (sexo === 'Masculino') {
         // Riesgo Bajo: < 94. Riesgo Alto: >= 94. Riesgo Muy Alto: >= 102
         if (pabFloat < 94) return 'RIESGO BAJO'; 
@@ -311,6 +318,24 @@ function getAptitude(imc, sexo, pab, paString) {
     const imcFloat = parseFloat(imc);
     const pabFloat = parseFloat(pab); 
     let clasificacionMINSA, resultado, detalle;
+    
+    // *** MODIFICACIÓN PRINCIPAL: Manejo de NO ASISTIÓ/Registro Vacío ***
+    if (imcFloat === 0 && pabFloat === 0 && paString === 'N/A') {
+         // Este es un registro de NO ASISTIÓ creado por el sistema
+        clasificacionMINSA = "NO ASISTIÓ";
+        resultado = "INAPTO (NO ASISTIÓ)";
+        detalle = "Registro generado automáticamente por inasistencia mensual.";
+        const resultadoSimplificado = 'INAPTO';
+        return { 
+            resultado: resultadoSimplificado, 
+            detalle, 
+            clasificacionMINSA, 
+            paClasificacion: 'N/A', 
+            riesgoAEnf: 'N/A',
+            motivoInapto: 'NO ASISTIÓ'
+        };
+    }
+    // *** FIN MODIFICACIÓN NO ASISTIÓ ***
     
     // 1. Clasificación MINSA (Clasificación de IMC - FIEL A LA TABLA OMS)
     if (imcFloat < 18.5) clasificacionMINSA = "BAJO PESO";
@@ -731,15 +756,21 @@ function renderTable(records) {
         const row = tableBody.insertRow();
         row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
         
+        // Si es un registro NO ASISTIÓ, mostrar el campo MOTIVO como CLASIFICACIÓN
+        const clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? data.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
+        
         const riesgoAbdominalClass = riesgoAEnf === 'RIESGO MUY ALTO' ? 'text-red-500 font-bold' : (riesgoAEnf === 'RIESGO ALTO' ? 'text-color-accent-gold' : 'text-color-primary-green');
         const paClasificacionClass = paClasificacion === 'HIPERTENSION' ? 'text-red-500 font-bold' : (paClasificacion === 'PRE-HIPERTENSION' ? 'text-yellow-500' : 'text-color-primary-green');
         
         let actionButtons = '<span>N/A</span>';
         if (currentUserRole === 'superadmin') {
-            actionButtons = `
-                <button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Editar Registro">
-                    <i class="fas fa-pencil-alt"></i>
-                </button>
+            // No permitir editar un registro de NO ASISTIÓ
+            const isNoAsistio = data.motivo === 'NO ASISTIÓ';
+            const editButton = isNoAsistio ? 
+                '<button class="text-gray-500 text-lg mr-4" title="No se puede editar NO ASISTIÓ" disabled><i class="fas fa-pencil-alt"></i></button>' :
+                `<button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Editar Registro"><i class="fas fa-pencil-alt"></i></button>`;
+                
+            actionButtons = `${editButton}
                 <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
                     <i class="fas fa-trash-alt"></i>
                 </button>
@@ -756,7 +787,7 @@ function renderTable(records) {
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-gold">${data.edad || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.startsWith('INAPTO') ? 'text-red-500' : 'text-color-accent-gold'}">${data.imc || 'N/A'}</td>
             
-            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${clasificacionMINSA.toUpperCase()}</td> <!-- NUEVA COLUMNA DE CLASIFICACION IMC -->
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${clasificacionDisplay}</td> <!-- MUESTRA MOTIVO (NO ASISTIÓ) O CLASIFICACIÓN IMC -->
             
             <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
@@ -816,7 +847,7 @@ function exportToWord() {
         const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
         
         // CLASIFICACIÓN SIMPLIFICADA: SOLO MUESTRA EL TEXTO (ej: NORMAL)
-        let clasificacionDisplay = clasificacionMINSA.toUpperCase();
+        let clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
         
         htmlContent += `<tr>
             <td style="${cellStyle}">${record.unidad || 'N/A'}</td>
@@ -982,6 +1013,13 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
                 displayMessage('REGISTRO DUPLICADO', checkData.message, 'warning');
                 document.getElementById('admin-result-box').classList.add('hidden');
                 return; // <<-- BLOQUEAR EL GUARDADO
+            }
+            
+            // Si se crearon registros faltantes, mostrar alerta
+            if (checkData.missingRecordsCreated) {
+                displayMessage('REGISTROS CREADOS', `Se crearon ${checkData.count} registros de 'NO ASISTIÓ' para los meses faltantes.`, 'success');
+                // Esperar a que la tabla se actualice con los registros 'NO ASISTIÓ' antes de guardar el registro actual
+                await fetchAndDisplayRecords(); 
             }
         }
         // *** FIN DE LA REGLA DE UNICIDAD MENSUAL ***
