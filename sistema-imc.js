@@ -946,7 +946,7 @@ document.getElementById('bmi-form').addEventListener('submit', function(e) {
     }
 });
 
-document.getElementById('admin-record-form').addEventListener('submit', function(e) {
+document.getElementById('admin-record-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     if (!isAuthenticated) {
         displayMessage('Acceso Denegado', 'Debe iniciar sesión para operar.', 'error');
@@ -972,9 +972,23 @@ document.getElementById('admin-record-form').addEventListener('submit', function
 
     // VALIDACIÓN DE CAMPOS CLAVE
     if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 0 && gguu && unidad && dni && pa) {
+        
+        // *** INICIO DE LA REGLA DE UNICIDAD MENSUAL ***
+        if (!isEditMode) {
+            const checkResponse = await fetch(`/api/records/check-monthly/${cip}`);
+            const checkData = await checkResponse.json();
+
+            if (checkData.alreadyRecorded) {
+                displayMessage('REGISTRO DUPLICADO', checkData.message, 'warning');
+                document.getElementById('admin-result-box').classList.add('hidden');
+                return; // <<-- BLOQUEAR EL GUARDADO
+            }
+        }
+        // *** FIN DE LA REGLA DE UNICIDAD MENSUAL ***
+        
         const imc = calculateIMC(peso, altura);
         // LLAMADA A LA LÓGICA CLÍNICA COMPLETA
-        const { resultado, detalle, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(imc, sexo, pab, pa); // <<-- CORREGIDO: CAPTURAR motivoInapto
+        const { resultado, detalle, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(imc, sexo, pab, pa); 
         
         const badgeClass = getSimplifiedAptitudeStyle(resultado);
         document.getElementById('admin-bmi-value').textContent = imc;
@@ -1089,16 +1103,11 @@ function handleDNIInput(event) {
     // Si la entrada es borrada o incompleta, no hacer nada para mantener el registro manual
 }
 
-// <<-- FUNCIÓN handleCIPInput ELIMINADA y su escucha también
-
 // Lógica de Eventos para DNI/CIP
 document.getElementById('input-dni').addEventListener('blur', handleDNIInput);
 
-// <<-- ELIMINADA la escucha del CIP
-// document.getElementById('input-userid').addEventListener('blur', handleCIPInput);
-
-// ELIMINAMOS la lógica del 'input' para evitar limpiezas accidentales al borrar DNI
-// document.getElementById('input-dni').addEventListener('input', ...);
+// ELIMINAMOS la escucha del CIP
+// document.getElementById('input-userid').removeEventListener('blur', handleCIPInput);
 
 document.addEventListener('DOMContentLoaded', () => {
     updateUI();

@@ -53,11 +53,11 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
             console.log("Tablas de base de datos listas. El servidor está listo para iniciar.");
 
             // *** CÓDIGO AÑADIDO: INSERCIÓN DE USUARIO SUPERADMIN POR DEFECTO ***
+            // IMPORTANTE: Modifica estos datos DESPUÉS de hacer un 'fly deploy' exitoso.
             const defaultPassword = 'superadmin'; 
             bcrypt.hash(defaultPassword, 10, (err, hash) => {
                 if (err) return console.error("Error al hashear contraseña inicial:", err.message);
 
-                // Intenta insertar el usuario, si ya existe por CIP (PRIMARY KEY) o EMAIL (UNIQUE), lo ignora.
                 db.run(`INSERT OR IGNORE INTO users (cip, fullName, password, role, email) VALUES (?, ?, ?, ?, ?)`, 
                     ['ADMIN001', 'Super Administrador SIMCEP', hash, 'superadmin', 'admin@simcep.com'], 
                     function(err) {
@@ -73,6 +73,39 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 
 // --- 4. RUTAS DE LA API PARA REGISTROS ---
+
+// [GET] /api/records/check-monthly/:cip (NUEVA RUTA DE UNICIDAD MENSUAL)
+app.get('/api/records/check-monthly/:cip', (req, res) => {
+    const { cip } = req.params;
+    
+    // Calcula el patrón de mes/año (Ej: '10/2025')
+    const now = new Date();
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const currentYear = now.getFullYear();
+    const monthYear = `${currentMonth}/${currentYear}`;
+
+    // Patrón para buscar en el campo 'fecha' (Ej: '%/10/2025')
+    // Esto coincide con cualquier día en el mes y año
+    const pattern = `%/${monthYear}`; 
+
+    const sql = "SELECT id FROM records WHERE cip = ? AND fecha LIKE ?"; 
+    
+    db.get(sql, [cip, pattern], (err, row) => {
+        if (err) {
+            console.error("Error en validación mensual:", err.message);
+            return res.status(500).json({ error: "Error al validar registro mensual." });
+        }
+        
+        if (row) {
+            // Ya existe un registro para este CIP en el mes
+            return res.json({ alreadyRecorded: true, message: `El CIP ${cip} ya tiene un registro para el mes de ${currentMonth}/${currentYear}.` });
+        } else {
+            // No existe registro
+            return res.json({ alreadyRecorded: false });
+        }
+    });
+});
+
 
 // [GET] /api/patient/:dni (MODIFICADA: Autocompleta Grado y DOB)
 app.get('/api/patient/:dni', (req, res) => {
