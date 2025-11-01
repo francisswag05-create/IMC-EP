@@ -9,9 +9,6 @@ let isEditMode = false;
 let currentEditingRecordId = null;
 let progressionChart = null; // Variable para la instancia del gráfico Chart.js
 
-// Variable global para el mes/año actual por defecto (Ej: '10/2025')
-let currentMonthYearDefault = ''; 
-
 // --- 2. Funciones de Utilidad y UI ---
 function displayMessage(title, text, type) {
     const box = document.getElementById('message-box');
@@ -672,7 +669,12 @@ function populateMonthFilter() {
     const currentYear = now.getFullYear();
     const currentMonthYear = `${currentMonth}/${currentYear}`; // (Ej: '10/2025')
     
-    filterSelect.value = currentMonthYear;
+    // Seleccionamos el mes actual si existe, sino se queda en "Todos los Meses"
+    if (filterSelect.querySelector(`option[value="${currentMonthYear}"]`)) {
+        filterSelect.value = currentMonthYear;
+    } else {
+        filterSelect.selectedIndex = 0; // Por defecto "Todos los Meses" (la opción con value="")
+    }
     // *** FIN CORRECCIÓN CLAVE ***
     
     const defaultOption = filterSelect.querySelector('option[value=""]');
@@ -769,7 +771,12 @@ function renderProgressionChart(records) {
 
     // *** CORRECCIÓN DEL EJE X: Mes y Año completos ***
     const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    const labels = records.map(r => {
+    
+    // *** CORRECCIÓN CLAVE: ORDENACIÓN ASCENDENTE PARA LA GRÁFICA ***
+    // currentFilteredRecords está en DESC. Creamos una copia invertida para el gráfico.
+    const chartRecordsAsc = [...records].reverse(); 
+    
+    const labels = chartRecordsAsc.map(r => {
         const parts = r.fecha.split('/'); // DD/MM/YYYY o 01/MM/YYYY
         const monthIndex = parseInt(parts[1]) - 1;
         const year = parts[2];
@@ -780,7 +787,7 @@ function renderProgressionChart(records) {
     // *** CORRECCIÓN DEL TÍTULO DE LA GRÁFICA ***
     const chartTitle = `${records[0].grado} ${records[0].apellido}, ${records[0].nombre}`;
 
-    const dataPoints = records.map(r => r.motivo === 'NO ASISTIÓ' ? null : parseFloat(r.imc));
+    const dataPoints = chartRecordsAsc.map(r => r.motivo === 'NO ASISTIÓ' ? null : parseFloat(r.imc));
 
     // Si ya existe una instancia de gráfico, la destruimos
     if (progressionChart) {
@@ -790,10 +797,10 @@ function renderProgressionChart(records) {
     progressionChart = new Chart(ctx.getContext('2d'), {
         type: 'line',
         data: {
-            labels: labels,
+            labels: labels, // Usar las etiquetas ASC
             datasets: [{
                 label: 'Índice de Masa Corporal (IMC)',
-                data: dataPoints,
+                data: dataPoints, // Usar los datos ASC
                 borderColor: '#CCFF00', // Verde Neón (tu color accent-lime)
                 backgroundColor: 'rgba(204, 255, 0, 0.1)',
                 borderWidth: 2,
@@ -1468,6 +1475,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterSelect = document.getElementById('month-filter');
     if (filterSelect) {
         // Aseguramos que el filtro se establezca al mes actual
+        // PERO SÓLO si hay registros en ese mes para que populateMonthFilter lo detecte
+        // Si no hay, populateMonthFilter lo dejará en "Todos los Meses"
         filterSelect.value = currentMonthYear;
     }
     // *** FIN CORRECCIÓN CLAVE ***
