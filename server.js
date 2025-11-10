@@ -70,6 +70,25 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
     }
 });
 
+// NUEVA FUNCIÓN: Cálculo de edad a partir de la fecha de nacimiento (DOB)
+// dobString: YYYY-MM-DD (del input type="date")
+// referenceDateString: DD/MM/YYYY (del formato de la DB)
+function calculateAgeFromDOB(dobString, referenceDateString) {
+    if (!dobString || !referenceDateString || dobString.length < 10 || referenceDateString.length < 10) return 0;
+    
+    // Obtener componentes de DOB
+    const [dobYear, dobMonth, dobDay] = dobString.split('-').map(Number);
+    // Obtener componentes de la fecha de referencia (01/MM/YYYY)
+    const [refDay, refMonth, refYear] = referenceDateString.split('/').map(Number);
+    
+    let age = refYear - dobYear;
+    
+    // Ajustar si la fecha de referencia es anterior al cumpleaños
+    if (refMonth < dobMonth || (refMonth === dobMonth && refDay < dobDay)) {
+        age--;
+    }
+    return age;
+}
 
 // Función auxiliar para la inserción de SQLite dentro de un Promise
 function dbRunPromise(sql, params) {
@@ -123,24 +142,31 @@ app.get('/api/stats', (req, res) => {
 });
 
 
-// [GET] /api/records/check-monthly/:cip (RUTA DE UNICIDAD Y RELLENO)
+// [GET] /api/records/check-monthly/:cip (MODIFICADA: ACEPTA targetMonthYear)
 app.get('/api/records/check-monthly/:cip', (req, res) => {
     const { cip } = req.params;
+    // Capturamos el mes objetivo (MM/YYYY) enviado desde el frontend
+    const { targetMonthYear } = req.query; 
 
+    // Si no se especifica un mes objetivo, usamos el mes actual como fallback
     const now = new Date();
-    const currentMonth = now.getMonth() + 1;
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
     const currentYear = now.getFullYear();
-    const currentMonthYear = `${String(currentMonth).padStart(2, '0')}/${currentYear}`;
+    const targetMonthYearValue = targetMonthYear || `${currentMonth}/${currentYear}`; // MM/YYYY
     
+    // Convertir el targetMonthYearValue (MM/YYYY) a un objeto Date (primer día del mes)
+    const [targetMonth, targetYear] = targetMonthYearValue.split('/').map(Number);
+    const targetDate = new Date(targetYear, targetMonth - 1, 1); 
+
     // --- 1. BUSCAR EL REGISTRO MÁS RECIENTE ---
     db.get("SELECT * FROM records WHERE cip = ? ORDER BY id DESC LIMIT 1", [cip], async (err, lastRecord) => {
         if (err) return res.status(500).json({ error: "Error al buscar último registro." });
         
         let missingMonthsCount = 0;
 
-        // --- 2. VERIFICAR SI HAY REGISTROS EN EL MES ACTUAL ---
-        if (lastRecord && lastRecord.fecha && lastRecord.fecha.includes(currentMonthYear)) {
-            return res.json({ alreadyRecorded: true, message: `El CIP ${cip} ya tiene un registro para el mes de ${currentMonthYear}.` });
+        // --- 2. VERIFICAR SI HAY REGISTROS EN EL MES OBJETIVO (targetMonthYearValue) ---
+        if (lastRecord && lastRecord.fecha && lastRecord.fecha.includes(targetMonthYearValue)) {
+            return res.json({ alreadyRecorded: true, message: `El CIP ${cip} ya tiene un registro para el mes de ${targetMonthYearValue}.` });
         }
         
         // --- 3. RELLENO DE REGISTROS FALTANTES ---
@@ -151,27 +177,30 @@ app.get('/api/records/check-monthly/:cip', (req, res) => {
             let lastYear = parseInt(lastDateParts[2]);
 
             // Crear un objeto de fecha para el mes siguiente al último registro
-            let checkDate = new Date(lastYear, lastMonth, 1); // lastMonth es 0-indexed, así que el mes siguiente es correcto
+            let checkDate = new Date(lastYear, lastMonth, 1); // lastMonth es 0-indexed en JS
 
             // Bucle para crear registros 'NO ASISTIÓ'
             while (
-                checkDate.getTime() < now.getTime() && // Asegurarse de que no sea el mes actual
-                (checkDate.getMonth() + 1 !== currentMonth || checkDate.getFullYear() !== currentYear)
+                checkDate.getTime() < targetDate.getTime() // <-- EL CAMBIO CLAVE: Bucle hasta el mes ANTERIOR al objetivo
             ) {
                 const missingMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
                 const missingYear = checkDate.getFullYear();
                 const missingDate = `01/${missingMonth}/${missingYear}`;
                 
+                // Calcular la edad a la fecha de inasistencia (Mejora de Precisión)
+                // Usamos la fecha del registro faltante como fecha de referencia
+                const ageAtMissingDate = calculateAgeFromDOB(lastRecord.dob, missingDate); 
+                
                 // Crea un nuevo registro de 'NO ASISTIÓ'
                 const missingRecord = {
                     ...lastRecord,
-                    id: null, // Dejar que la DB asigne un nuevo ID
-                    fecha: missingDate,
-                    peso: 0, altura: 0.01, imc: 0, pab: 0, // Altura en 0.01 para evitar divisiones por cero en el frontend
+                    id: null, 
+                    fecha: missingDate, // 01/MM/YYYY
+                    peso: 0, altura: 0.01, imc: 0, pab: 0, 
                     pa: 'N/A', paClasificacion: 'N/A', riesgoAEnf: 'N/A',
                     motivo: 'NO ASISTIÓ', 
                     registradoPor: 'SISTEMA (NO ASISTIÓ)', 
-                    edad: lastRecord.edad // Usar la última edad conocida
+                    edad: ageAtMissingDate // <-- USAR LA EDAD CALCULADA
                 };
                 
                 // LÍNEA DE INSERCIÓN (SQL con 20 campos)
@@ -255,20 +284,20 @@ app.post('/api/records', (req, res) => {
     });
 });
 
-// [PUT] /api/records/:id (MODIFICADA: incluye Motivo y DOB)
+// [PUT] /api/records/:id (MODIFICADA: incluye Motivo, DOB y FECHA)
 app.put('/api/records/:id', (req, res) => {
     const { id } = req.params;
-    // CAPTURA DE TODOS LOS CAMPOS (Ahora incluye motivo y dob)
-    const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob } = req.body;
+    // CAPTURA DE TODOS LOS CAMPOS (Ahora incluye motivo, dob y fecha)
+    const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob, fecha } = req.body;
     
     // SQL con todos los 17 campos para actualización
     const sql = `UPDATE records SET 
                     gguu = ?, unidad = ?, dni = ?, pa = ?, pab = ?, paClasificacion = ?, riesgoAEnf = ?,
                     sexo = ?, cip = ?, grado = ?, apellido = ?, nombre = ?, 
-                    edad = ?, peso = ?, altura = ?, imc = ?, motivo = ?, dob = ?
+                    edad = ?, peso = ?, altura = ?, imc = ?, motivo = ?, dob = ?, fecha = ?
                  WHERE id = ?`;
                  
-    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob, id], function(err) {
+    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob, fecha, id], function(err) {
         if (err) return res.status(500).json({ message: "Error al actualizar.", error: err.message });
         if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
         res.json({ message: "Registro actualizado." });
@@ -578,3 +607,4 @@ app.post('/api/reset-password', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor SIMCEP corriendo en http://0.0.0.0:${PORT}`);
 });
+```

@@ -531,6 +531,12 @@ async function saveRecord(record) {
         }
         displayMessage('REGISTRO EXITOSO', `Personal con CIP ${record.cip} ha sido guardado en la base de datos.`, 'success');
         document.getElementById('admin-record-form').reset();
+        // Restablecer el campo de mes de registro al mes actual después de guardar
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        document.getElementById('input-registro-month').value = `${year}-${month}`; // <-- RESET AL MES ACTUAL
+        
         setTimeout(() => document.getElementById('admin-result-box').classList.add('hidden'), 5000);
         await fetchAndDisplayRecords();
     } catch (error) {
@@ -571,6 +577,18 @@ function handleEditRecord(id) {
     document.getElementById('input-pa').value = recordToEdit.pa || '';
     document.getElementById('input-pab').value = recordToEdit.pab || '';
     document.getElementById('input-dob').value = recordToEdit.dob || ''; // <<-- AÑADIDO: Cargar DOB para edición
+    
+    // --- NUEVO CAMPO: Cargar el Mes de Registro (solo el mes/año) ---
+    // El formato de la DB es DD/MM/YYYY, el campo de input es YYYY-MM
+    if (recordToEdit.fecha && recordToEdit.fecha.includes('/')) {
+        const parts = recordToEdit.fecha.split('/'); // [DD, MM, YYYY]
+        // Se carga el mes/año del registro que se está editando
+        document.getElementById('input-registro-month').value = `${parts[2]}-${parts[1]}`; 
+    } else {
+        document.getElementById('input-registro-month').value = ''; 
+    }
+    // -----------------------------------------------------------------
+
 
     // CARGAR CAMPOS EXISTENTES
     document.getElementById('input-sex-admin').value = recordToEdit.sexo;
@@ -611,6 +629,12 @@ function cancelEdit() {
     const submitButton = document.querySelector('#admin-record-form button[type="submit"]');
     submitButton.innerHTML = '<i class="fas fa-database mr-2"></i> GUARDAR Y CALCULAR APTITUD';
     document.querySelector('#admin-record-form h3').innerHTML = '<i class="fas fa-user-plus mr-2 text-color-accent-lime"></i> REGISTRO DE NUEVO PERSONAL';
+    
+    // Restablecer el campo de mes de registro al mes actual
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    document.getElementById('input-registro-month').value = `${year}-${month}`;
     
     document.getElementById('admin-result-box').classList.add('hidden');
 }
@@ -1316,12 +1340,28 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
     const altura = parseFloat(form.elements['input-height-admin'].value);
     const pab = parseFloat(form.elements['input-pab'].value); 
 
+    // *** SOLUCIÓN FLEXIBILIDAD: CAPTURA DE MES DE REGISTRO (YYYY-MM) ***
+    const registroMonthYear = form.elements['input-registro-month'].value; 
+    
+    if (!registroMonthYear) {
+        displayMessage('Error de Entrada', 'Debe seleccionar el Mes del Registro.', 'error');
+        return;
+    }
+    const [regYear, regMonth] = registroMonthYear.split('-');
+    // Formato que la DB usa para la FECHA: DD/MM/YYYY (Usamos 01 para el día)
+    const formattedDate = `01/${regMonth}/${regYear}`; 
+    // Formato que la DB usa para la UNICIDAD: MM/YYYY
+    const formattedMonthYear = `${regMonth}/${regYear}`; 
+    // ********************************************************************
+
+
     // VALIDACIÓN DE CAMPOS CLAVE
     if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 0 && gguu && unidad && dni && pa) {
         
-        // *** INICIO DE LA REGLA DE UNICIDAD MENSUAL ***
+        // *** INICIO DE LA REGLA DE UNICIDAD MENSUAL (MODIFICADA) ***
         if (!isEditMode) {
-            const checkResponse = await fetch(`/api/records/check-monthly/${cip}`);
+            // CAMBIO CLAVE: Enviamos el mes objetivo como query param
+            const checkResponse = await fetch(`/api/records/check-monthly/${cip}?targetMonthYear=${formattedMonthYear}`);
             const checkData = await checkResponse.json();
 
             if (checkData.alreadyRecorded) {
@@ -1356,18 +1396,12 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
         const digitadorFinal = `${currentAdminUser} (${adminRoleText} ${primerApellido})`; // <-- CORREGIDO
 
         if (isEditMode) {
-            // AÑADIR TODOS LOS CAMPOS (Motivo y DOB)
-            const updatedRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo: motivoInapto, dob: dob }; // <<-- CORREGIDO
+            // AÑADIR TODOS LOS CAMPOS (Motivo, DOB y FECHA seleccionada)
+            const updatedRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo: motivoInapto, dob: dob, fecha: formattedDate }; 
             updateRecord(currentEditingRecordId, updatedRecord);
         } else {
-            const now = new Date();
-            const day = String(now.getDate()).padStart(2, '0');
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const year = now.getFullYear();
-            const formattedDate = `${day}/${month}/${year}`;
-            
-            // AÑADIR TODOS LOS CAMPOS (Motivo y DOB)
-            const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: digitadorFinal, motivo: motivoInapto, dob: dob }; // <<-- CORREGIDO
+            // AÑADIR TODOS LOS CAMPOS (Motivo, DOB y FECHA seleccionada)
+            const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: digitadorFinal, motivo: motivoInapto, dob: dob }; // <<-- USAMOS formattedDate
             saveRecord(newRecord);
         }
     } else {
@@ -1466,8 +1500,9 @@ document.getElementById('input-dni').addEventListener('blur', handleDNIInput);
 // document.getElementById('input-userid').removeEventListener('blur', handleCIPInput);
 
 document.addEventListener('DOMContentLoaded', () => {
-    // *** CORRECCIÓN CLAVE: Inicializar el filtro al mes actual al cargar el DOM ***
     const now = new Date();
+    
+    // Configuración inicial del filtro de tabla (Mes actual)
     const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
     const currentYear = now.getFullYear();
     const currentMonthYear = `${currentMonth}/${currentYear}`; 
@@ -1475,11 +1510,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterSelect = document.getElementById('month-filter');
     if (filterSelect) {
         // Aseguramos que el filtro se establezca al mes actual
-        // PERO SÓLO si hay registros en ese mes para que populateMonthFilter lo detecte
-        // Si no hay, populateMonthFilter lo dejará en "Todos los Meses"
         filterSelect.value = currentMonthYear;
     }
-    // *** FIN CORRECCIÓN CLAVE ***
+    
+    // Configuración inicial del input del Mes de Registro (YYYY-MM)
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const registroMonthInput = document.getElementById('input-registro-month');
+    if (registroMonthInput) {
+        registroMonthInput.value = `${year}-${month}`;
+    }
 
     updateUI();
 });
+```
