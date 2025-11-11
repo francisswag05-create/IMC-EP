@@ -1,6 +1,7 @@
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+// const sqlite3 = require('sqlite3').verbose(); // <<< ELIMINADO
+const { Pool } = require('pg'); // <<< AÑADIDO: Paquete de PostgreSQL
 const bcrypt = require('bcrypt');
 const path = require('path');
 const cors = require('cors'); 
@@ -9,6 +10,7 @@ const crypto = require('crypto');
 const ExcelJS = require('exceljs'); 
 
 const app = express();
+// Railway utiliza la variable PORT para el puerto interno del contenedor
 const PORT = process.env.PORT || 3000; 
 
 // --- 2. MIDDLEWARE ---
@@ -16,332 +18,324 @@ app.use(cors());
 app.use(express.json()); 
 app.use(express.static(path.join(__dirname, '/'))); 
 
-// --- 3. CONEXIÓN A LA BASE DE DATOS SQLITE ---
-const dbPath = '/data/simcep';
-
-const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
-    if (err) {
-        console.error("Error FATAL al conectar con la base de datos:", err.message);
-        process.exit(1); 
-    } else {
-        console.log("Conexión a la base de datos SQLite establecida con éxito.");
-        db.exec(`
-            CREATE TABLE IF NOT EXISTS users (
-                cip TEXT PRIMARY KEY,
-                fullName TEXT NOT NULL,
-                password TEXT NOT NULL,
-                role TEXT NOT NULL,
-                email TEXT UNIQUE,
-                resetPasswordToken TEXT,
-                resetPasswordExpires INTEGER
-            );
-            CREATE TABLE IF NOT EXISTS records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                gguu TEXT, unidad TEXT, dni TEXT, pa TEXT, pab REAL, paClasificacion TEXT, riesgoAEnf TEXT, 
-                sexo TEXT, cip TEXT, grado TEXT, apellido TEXT,
-                nombre TEXT, edad INTEGER, peso REAL, altura REAL, 
-                imc REAL, fecha TEXT,
-                registradoPor TEXT,
-                motivo TEXT,               -- AÑADIDO MOTIVO INAPTO
-                dob TEXT                   -- AÑADIDO FECHA DE NACIMIENTO (DOB)
-            );
-        `, (err) => {
-            if (err) {
-                console.error("Error al asegurar las tablas:", err.message);
-                process.exit(1);
-            }
-            console.log("Tablas de base de datos listas. El servidor está listo para iniciar.");
-
-            // *** CÓDIGO TEMPORAL: INSERCIÓN DE USUARIO SUPERADMIN POR DEFECTO ***
-            const defaultPassword = 'superadmin'; 
-            bcrypt.hash(defaultPassword, 10, (err, hash) => {
-                if (err) return console.error("Error al hashear contraseña inicial:", err.message);
-
-                db.run(`INSERT OR IGNORE INTO users (cip, fullName, password, role, email) VALUES (?, ?, ?, ?, ?)`, 
-                    ['ADMIN001', 'Super Administrador SIMCEP', hash, 'superadmin', 'admin@simcep.com'], 
-                    function(err) {
-                        if (err) console.error("Error al crear usuario inicial:", err.message);
-                        else if (this.changes > 0) console.log("✅ Usuario Super Admin Inicial creado (CIP: ADMIN001 | CLAVE: superadmin)");
-                    }
-                );
-            });
-            // *** FIN DEL CÓDIGO TEMPORAL ***
-        });
-    }
+// --- 3. CONEXIÓN A LA BASE DE DATOS POSTGRESQL (Railway) ---
+// Railway inyecta la variable de entorno DATABASE_URL
+const pool = new Pool({
+    // Utiliza la variable de entorno de Railway
+    connectionString: process.env.DATABASE_URL, 
+    // Esto es necesario para la conexión segura en la nube
+    ssl: { rejectUnauthorized: false } 
 });
 
+// Función auxiliar para las consultas (reemplaza a db.all/db.get/db.run de SQLite)
+// En Postgres, usamos $1, $2, etc., en lugar de ?, ?, ?
+function dbQueryPromise(sql, params = []) {
+    // Si la conexión no se ha iniciado, devolvemos un error
+    if (!process.env.DATABASE_URL) {
+        return Promise.reject(new Error("La variable DATABASE_URL de Railway no está configurada."));
+    }
+    return pool.query(sql, params)
+        .then(res => res.rows)
+        .catch(err => {
+            console.error("Error en consulta DB:", err);
+            throw err;
+        });
+}
+
+// Función para inicializar la base de datos (Postgres)
+async function initializeDatabase() {
+    console.log("Conexión a la base de datos PostgreSQL de Railway establecida con éxito.");
+    const client = await pool.connect();
+    try {
+        // Ejecución de la creación de tablas (Postgres usa SERIAL PRIMARY KEY y tipos específicos)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                cip VARCHAR(50) PRIMARY KEY,
+                fullName VARCHAR(255) NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                role VARCHAR(50) NOT NULL,
+                email VARCHAR(255) UNIQUE,
+                resetPasswordToken VARCHAR(255),
+                resetPasswordExpires BIGINT
+            );
+            CREATE TABLE IF NOT EXISTS records (
+                id SERIAL PRIMARY KEY, 
+                gguu VARCHAR(50), unidad VARCHAR(100), dni VARCHAR(50), pa VARCHAR(50), pab REAL, paClasificacion VARCHAR(50), riesgoAEnf VARCHAR(50), 
+                sexo VARCHAR(50), cip VARCHAR(50), grado VARCHAR(50), apellido VARCHAR(100),
+                nombre VARCHAR(100), edad INTEGER, peso REAL, altura REAL, 
+                imc REAL, fecha VARCHAR(50),
+                registradoPor VARCHAR(255),
+                motivo VARCHAR(50),
+                dob VARCHAR(50)
+            );
+        `);
+        console.log("Tablas de base de datos listas.");
+        
+        // *** CÓDIGO TEMPORAL: INSERCIÓN DE USUARIO SUPERADMIN POR DEFECTO ***
+        const defaultPassword = 'superadmin'; 
+        const hash = await bcrypt.hash(defaultPassword, 10);
+
+        // INSERT OR IGNORE en Postgres se hace con ON CONFLICT
+        const insertUserSql = `INSERT INTO users (cip, fullName, password, role, email) 
+                               VALUES ($1, $2, $3, $4, $5) 
+                               ON CONFLICT (cip) DO NOTHING;`;
+        
+        const result = await client.query(insertUserSql, 
+            ['ADMIN001', 'Super Administrador SIMCEP', hash, 'superadmin', 'admin@simcep.com']
+        );
+        
+        if (result.rowCount > 0) {
+            console.log("✅ Usuario Super Admin Inicial creado (CIP: ADMIN001 | CLAVE: superadmin)");
+        }
+        // *** FIN DEL CÓDIGO TEMPORAL ***
+        
+    } catch (err) {
+        console.error("Error FATAL al conectar con la base de datos:", err.message);
+        process.exit(1); 
+    } finally {
+        client.release();
+    }
+}
+
+// Ejecutar la inicialización
+initializeDatabase();
+
+
 // NUEVA FUNCIÓN: Cálculo de edad a partir de la fecha de nacimiento (DOB)
-// dobString: YYYY-MM-DD (del input type="date")
-// referenceDateString: DD/MM/YYYY (del formato de la DB)
 function calculateAgeFromDOB(dobString, referenceDateString) {
     if (!dobString || !referenceDateString || dobString.length < 10 || referenceDateString.length < 10) return 0;
     
-    // Obtener componentes de DOB
     const [dobYear, dobMonth, dobDay] = dobString.split('-').map(Number);
-    // Obtener componentes de la fecha de referencia (01/MM/YYYY)
     const [refDay, refMonth, refYear] = referenceDateString.split('/').map(Number);
     
     let age = refYear - dobYear;
     
-    // Ajustar si la fecha de referencia es anterior al cumpleaños
     if (refMonth < dobMonth || (refMonth === dobMonth && refDay < dobDay)) {
         age--;
     }
     return age;
 }
 
-// Función auxiliar para la inserción de SQLite dentro de un Promise
-function dbRunPromise(sql, params) {
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function(err) {
-            if (err) reject(err);
-            else resolve(this);
-        });
-    });
-}
-
-// [GET] /status - RUTA AÑADIDA PARA HEALTH CHECK DE FLY.IO
-app.get('/status', (req, res) => {
-    res.status(200).send('OK');
-});
 
 // --- 4. RUTAS DE LA API PARA REGISTROS ---
 
-// [GET] /api/stats (NUEVA RUTA DE ESTADÍSTICAS AVANZADAS)
+// [GET] /api/stats (Postgres)
 app.get('/api/stats', (req, res) => {
-    // Filtros disponibles: cip, gguu, unidad, sexo, monthYear
     const { cip, gguu, unidad, sexo, monthYear } = req.query; 
 
     let sql = "SELECT * FROM records WHERE 1=1"; 
     let params = [];
 
-    // Añadir filtros de identificación
-    if (cip) { sql += " AND cip = ?"; params.push(cip); }
-    if (gguu) { sql += " AND gguu = ?"; params.push(gguu); }
-    if (unidad) { sql += " AND unidad = ?"; params.push(unidad); }
-    if (sexo) { sql += " AND sexo = ?"; params.push(sexo); }
+    // Nota: La sintaxis de los parámetros se ajusta a Postgres ($1, $2, etc.)
+    if (cip) { sql += " AND cip = $1"; params.push(cip); }
+    if (gguu) { sql += ` AND gguu = $${params.length + 1}`; params.push(gguu); }
+    if (unidad) { sql += ` AND unidad = $${params.length + 1}`; params.push(unidad); }
+    if (sexo) { sql += ` AND sexo = $${params.length + 1}`; params.push(sexo); }
     
-    // Añadir filtro mensual (para reportes agregados)
     if (monthYear) {
-        // monthYear debe venir como MM/YYYY, buscamos el patrón '%/MM/YYYY'
         const pattern = `%/${monthYear}`; 
-        sql += " AND fecha LIKE ?"; 
+        sql += ` AND fecha LIKE $${params.length + 1}`; 
         params.push(pattern);
     }
 
-    // Ordenar por la fecha más antigua para ver la progresión
     sql += " ORDER BY id ASC"; 
 
-    db.all(sql, params, (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (rows.length === 0) return res.status(404).json({ message: "No se encontraron datos que coincidan con los criterios de búsqueda." });
-        
-        // El frontend se encargará de procesar estos datos (agregados o individuales)
-        res.json(rows); 
-    });
+    pool.query(sql, params)
+        .then(result => {
+            if (result.rows.length === 0) return res.status(404).json({ message: "No se encontraron datos que coincidan con los criterios de búsqueda." });
+            res.json(result.rows);
+        })
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
 
-// [GET] /api/records/check-monthly/:cip (MODIFICADA: ACEPTA targetMonthYear)
+// [GET] /api/records/check-monthly/:cip (Postgres)
 app.get('/api/records/check-monthly/:cip', (req, res) => {
     const { cip } = req.params;
-    // Capturamos el mes objetivo (MM/YYYY) enviado desde el frontend
     const { targetMonthYear } = req.query; 
 
-    // Si no se especifica un mes objetivo, usamos el mes actual como fallback
     const now = new Date();
     const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
     const currentYear = now.getFullYear();
     const targetMonthYearValue = targetMonthYear || `${currentMonth}/${currentYear}`; // MM/YYYY
     
-    // Convertir el targetMonthYearValue (MM/YYYY) a un objeto Date (primer día del mes)
     const [targetMonth, targetYear] = targetMonthYearValue.split('/').map(Number);
     const targetDate = new Date(targetYear, targetMonth - 1, 1); 
 
-    // --- 1. BUSCAR EL REGISTRO MÁS RECIENTE ---
-    db.get("SELECT * FROM records WHERE cip = ? ORDER BY id DESC LIMIT 1", [cip], async (err, lastRecord) => {
-        if (err) return res.status(500).json({ error: "Error al buscar último registro." });
-        
-        let missingMonthsCount = 0;
+    // --- 1. BUSCAR EL REGISTRO MÁS RECIENTE (Postgres) ---
+    const selectSql = "SELECT * FROM records WHERE cip = $1 ORDER BY id DESC LIMIT 1";
+    pool.query(selectSql, [cip])
+        .then(async result => {
+            const lastRecord = result.rows[0];
+            let missingMonthsCount = 0;
 
-        // --- 2. VERIFICAR SI HAY REGISTROS EN EL MES OBJETIVO (targetMonthYearValue) ---
-        if (lastRecord && lastRecord.fecha && lastRecord.fecha.includes(targetMonthYearValue)) {
-            return res.json({ alreadyRecorded: true, message: `El CIP ${cip} ya tiene un registro para el mes de ${targetMonthYearValue}.` });
-        }
-        
-        // --- 3. RELLENO DE REGISTROS FALTANTES ---
-        if (lastRecord) {
-            // Obtener el mes y año del último registro
-            const lastDateParts = lastRecord.fecha.split('/');
-            let lastMonth = parseInt(lastDateParts[1]);
-            let lastYear = parseInt(lastDateParts[2]);
-
-            // Crear un objeto de fecha para el mes siguiente al último registro
-            let checkDate = new Date(lastYear, lastMonth, 1); // lastMonth es 0-indexed en JS
-
-            // Bucle para crear registros 'NO ASISTIÓ'
-            while (
-                checkDate.getTime() < targetDate.getTime() // <-- EL CAMBIO CLAVE: Bucle hasta el mes ANTERIOR al objetivo
-            ) {
-                const missingMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
-                const missingYear = checkDate.getFullYear();
-                const missingDate = `01/${missingMonth}/${missingYear}`;
-                
-                // Calcular la edad a la fecha de inasistencia (Mejora de Precisión)
-                // Usamos la fecha del registro faltante como fecha de referencia
-                const ageAtMissingDate = calculateAgeFromDOB(lastRecord.dob, missingDate); 
-                
-                // Crea un nuevo registro de 'NO ASISTIÓ'
-                const missingRecord = {
-                    ...lastRecord,
-                    id: null, 
-                    fecha: missingDate, // 01/MM/YYYY
-                    peso: 0, altura: 0.01, imc: 0, pab: 0, 
-                    pa: 'N/A', paClasificacion: 'N/A', riesgoAEnf: 'N/A',
-                    motivo: 'NO ASISTIÓ', 
-                    registradoPor: 'SISTEMA (NO ASISTIÓ)', 
-                    edad: ageAtMissingDate // <-- USAR LA EDAD CALCULADA
-                };
-                
-                // LÍNEA DE INSERCIÓN (SQL con 20 campos)
-                const sql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-                
-                try {
-                    await dbRunPromise(sql, [
-                        missingRecord.gguu, missingRecord.unidad, missingRecord.dni, missingRecord.pa, 
-                        missingRecord.pab, missingRecord.paClasificacion, missingRecord.riesgoAEnf, 
-                        missingRecord.sexo, missingRecord.cip, missingRecord.grado, missingRecord.apellido, 
-                        missingRecord.nombre, missingRecord.edad, missingRecord.peso, missingRecord.altura, 
-                        missingRecord.imc, missingRecord.fecha, missingRecord.registradoPor, missingRecord.motivo, missingRecord.dob
-                    ]);
-                    missingMonthsCount++;
-                } catch (error) {
-                    console.error("Error al insertar registro faltante:", error);
-                    break;
-                }
-                
-                // Avanzar al siguiente mes
-                checkDate.setMonth(checkDate.getMonth() + 1);
+            // --- 2. VERIFICAR SI HAY REGISTROS EN EL MES OBJETIVO ---
+            if (lastRecord && lastRecord.fecha && lastRecord.fecha.includes(targetMonthYearValue)) {
+                return res.json({ alreadyRecorded: true, message: `El CIP ${cip} ya tiene un registro para el mes de ${targetMonthYearValue}.` });
             }
-        }
-        
-        // --- 4. RESPUESTA FINAL (Permitir el Guardado) ---
-        return res.json({ 
-            alreadyRecorded: false, 
-            missingRecordsCreated: missingMonthsCount > 0, 
-            count: missingMonthsCount 
-        });
-    });
+            
+            // --- 3. RELLENO DE REGISTROS FALTANTES ---
+            if (lastRecord) {
+                const lastDateParts = lastRecord.fecha.split('/');
+                let lastMonth = parseInt(lastDateParts[1]);
+                let lastYear = parseInt(lastDateParts[2]);
+
+                let checkDate = new Date(lastYear, lastMonth, 1); 
+
+                while (checkDate.getTime() < targetDate.getTime()) {
+                    const missingMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
+                    const missingYear = checkDate.getFullYear();
+                    const missingDate = `01/${missingMonth}/${missingYear}`;
+                    
+                    const ageAtMissingDate = calculateAgeFromDOB(lastRecord.dob, missingDate); 
+                    
+                    const missingRecord = {
+                        ...lastRecord,
+                        fecha: missingDate, 
+                        peso: 0, altura: 0.01, imc: 0, pab: 0, 
+                        pa: 'N/A', paClasificacion: 'N/A', riesgoAEnf: 'N/A',
+                        motivo: 'NO ASISTIÓ', 
+                        registradoPor: 'SISTEMA (NO ASISTIÓ)', 
+                        edad: ageAtMissingDate 
+                    };
+                    
+                    // LÍNEA DE INSERCIÓN (Postgres usa $1, $2, etc.)
+                    const insertSql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`;
+                    
+                    try {
+                        await pool.query(insertSql, [
+                            missingRecord.gguu, missingRecord.unidad, missingRecord.dni, missingRecord.pa, 
+                            missingRecord.pab, missingRecord.paClasificacion, missingRecord.riesgoAEnf, 
+                            missingRecord.sexo, missingRecord.cip, missingRecord.grado, missingRecord.apellido, 
+                            missingRecord.nombre, missingRecord.edad, missingRecord.peso, missingRecord.altura, 
+                            missingRecord.imc, missingRecord.fecha, missingRecord.registradoPor, missingRecord.motivo, missingRecord.dob
+                        ]);
+                        missingMonthsCount++;
+                    } catch (error) {
+                        console.error("Error al insertar registro faltante:", error);
+                        break;
+                    }
+                    
+                    checkDate.setMonth(checkDate.getMonth() + 1);
+                }
+            }
+            
+            // --- 4. RESPUESTA FINAL (Permitir el Guardado) ---
+            return res.json({ 
+                alreadyRecorded: false, 
+                missingRecordsCreated: missingMonthsCount > 0, 
+                count: missingMonthsCount 
+            });
+        })
+        .catch(err => res.status(500).json({ error: "Error interno al buscar registros: " + err.message }));
 });
 
 
-// [GET] /api/patient/:dni (MODIFICADA: Autocompleta Grado y DOB)
+// [GET] /api/patient/:dni (Postgres)
 app.get('/api/patient/:dni', (req, res) => {
     const { dni } = req.params;
     // Busca el registro más reciente del paciente por DNI o CIP
-    const sql = "SELECT * FROM records WHERE dni = ? OR cip = ? ORDER BY id DESC LIMIT 1";
-    db.get(sql, [dni, dni], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ message: "Paciente no encontrado." });
-        
-        // Devolvemos todos los campos necesarios para autocompletar
-        res.json({
-            gguu: row.gguu,
-            unidad: row.unidad,
-            cip: row.cip,
-            sexo: row.sexo,
-            apellido: row.apellido,
-            nombre: row.nombre,
-            edad: row.edad, 
-            fechaNacimiento: row.dob, // Usar row.dob (Fecha de Nacimiento)
-            grado: row.grado          // Devolver el Grado
-        });
-    });
+    const sql = "SELECT * FROM records WHERE dni = $1 OR cip = $2 ORDER BY id DESC LIMIT 1";
+    pool.query(sql, [dni, dni])
+        .then(result => {
+            const row = result.rows[0];
+            if (!row) return res.status(404).json({ message: "Paciente no encontrado." });
+            
+            // Devolvemos todos los campos necesarios para autocompletar
+            res.json({
+                gguu: row.gguu,
+                unidad: row.unidad,
+                cip: row.cip,
+                sexo: row.sexo,
+                apellido: row.apellido,
+                nombre: row.nombre,
+                edad: row.edad, 
+                fechaNacimiento: row.dob, 
+                grado: row.grado          
+            });
+        })
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
-// [GET] /api/records
+// [GET] /api/records (Postgres)
 app.get('/api/records', (req, res) => {
     const sql = "SELECT * FROM records ORDER BY id DESC";
-    db.all(sql, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+    pool.query(sql)
+        .then(result => res.json(result.rows))
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
-// [POST] /api/records (MODIFICADA: incluye Motivo y DOB)
+// [POST] /api/records (Postgres)
 app.post('/api/records', (req, res) => {
-    // CAPTURA DE TODOS LOS CAMPOS (Ahora son 20)
     const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob } = req.body;
     
     // SQL con todos los 20 campos para inserción
-    const sql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const sql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING id`;
     
-    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob], function(err) {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
-        res.status(201).json({ message: "Registro guardado exitosamente", id: this.lastID });
-    });
+    const values = [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob];
+    
+    pool.query(sql, values)
+        .then(result => res.status(201).json({ message: "Registro guardado exitosamente", id: result.rows[0].id }))
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
-// [PUT] /api/records/:id (MODIFICADA: incluye Motivo, DOB y FECHA)
+// [PUT] /api/records/:id (Postgres)
 app.put('/api/records/:id', (req, res) => {
     const { id } = req.params;
-    // CAPTURA DE TODOS LOS CAMPOS (Ahora incluye motivo, dob y fecha)
     const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob, fecha } = req.body;
     
     // SQL con todos los 17 campos para actualización
     const sql = `UPDATE records SET 
-                    gguu = ?, unidad = ?, dni = ?, pa = ?, pab = ?, paClasificacion = ?, riesgoAEnf = ?,
-                    sexo = ?, cip = ?, grado = ?, apellido = ?, nombre = ?, 
-                    edad = ?, peso = ?, altura = ?, imc = ?, motivo = ?, dob = ?, fecha = ?
-                 WHERE id = ?`;
+                    gguu = $1, unidad = $2, dni = $3, pa = $4, pab = $5, paClasificacion = $6, riesgoAEnf = $7,
+                    sexo = $8, cip = $9, grado = $10, apellido = $11, nombre = $12, 
+                    edad = $13, peso = $14, altura = $15, imc = $16, motivo = $17, dob = $18, fecha = $19
+                 WHERE id = $20`;
                  
-    db.run(sql, [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob, fecha, id], function(err) {
-        if (err) return res.status(500).json({ message: "Error al actualizar.", error: err.message });
-        if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
-        res.json({ message: "Registro actualizado." });
-    });
+    const values = [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob, fecha, id];
+    
+    pool.query(sql, values)
+        .then(result => {
+            if (result.rowCount === 0) return res.status(404).json({ message: "Registro no encontrado." });
+            res.json({ message: "Registro actualizado." });
+        })
+        .catch(err => res.status(500).json({ message: "Error al actualizar.", error: err.message }));
 });
 
-// [DELETE] /api/records/:id
+// [DELETE] /api/records/:id (Postgres)
 app.delete('/api/records/:id', (req, res) => {
     const { id } = req.params;
-    const sql = "DELETE FROM records WHERE id = ?";
-    db.run(sql, id, function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ message: "Registro no encontrado." });
-        res.json({ message: `Registro con ID ${id} eliminado.` });
-    });
+    const sql = "DELETE FROM records WHERE id = $1";
+    pool.query(sql, [id])
+        .then(result => {
+            if (result.rowCount === 0) return res.status(404).json({ message: "Registro no encontrado." });
+            res.json({ message: `Registro con ID ${id} eliminado.` });
+        })
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
 
-// [POST] /api/export-excel (CORREGIDA: usa record.motivo para el Excel)
+// [POST] /api/export-excel (Postgres - No requiere cambios en la lógica de la DB, solo en la consulta)
 app.post('/api/export-excel', async (req, res) => {
     try {
-        // ... (código de exportación inalterado)
-        // RECIBIMOS EL OBJETO CON RECORDS Y REPORTMONTH
+        // ... (el resto de la lógica de ExcelJS es la misma)
         const { records, reportMonth } = req.body; 
-
+        
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('CONSOLIDADO IMC');
         
-        // --- 1. Definición de Estilos (Solución para styles.xml) ---
-        const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF365F37' } }; // Verde Oscuro
+        const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF365F37' } }; 
         const FONT_WHITE = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
         const BORDER_THIN = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-        const FONT_RED = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFF0000' } }; // Rojo para INAPTO/Riesgo
+        const FONT_RED = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFF0000' } }; 
         const FONT_NORMAL = { name: 'Calibri', size: 11 };
         const DATA_FILL_STANDARD = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }; 
 
-        // --- 2. Encabezados (19 Columnas) ---
         const HEADERS = [
             "N", "GGUU", "UNIDAD", "GRADO", "APELLIDOS Y NOMBRES", "DNI", "CIP", 
             "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION PA", 
             "PAB", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", "MOTIVO", "DIGITADOR"
         ];
         
-        // --- 3. Aplicar Formato a la Fila de Encabezados (Fila 6, desde A6) ---
         const headerRow = worksheet.getRow(6);
         headerRow.values = HEADERS;
         
@@ -350,106 +344,89 @@ app.post('/api/export-excel', async (req, res) => {
             cell.font = FONT_WHITE;
             cell.border = BORDER_THIN;
             cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            // Establecer anchos de columna predeterminados
             worksheet.getColumn(colNumber).width = (colNumber === 5) ? 30 : 12; 
         });
         
-        // --- 4. Rellenar Filas de Datos ---
         records.forEach((record, index) => {
-            const rowNumber = 7 + index; // Empieza en la fila 7
+            const rowNumber = 7 + index; 
             const dataRow = worksheet.getRow(rowNumber);
             
-            // Los campos que vienen calculados del cliente (sistema-imc.js)
             const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase();
             const paClasificacion = (record.paClasificacion || 'N/A').toUpperCase();
             const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
             const resultado = (record.resultado || 'N/A').toUpperCase();
             
-            // --- LÓGICA DE DIGITADOR SIMPLIFICADA (CORRECCIÓN FINAL) ---
             let digitadorDisplay = record.registradoPor || '';
             if (digitadorDisplay) {
-                // 1. Quita el CIP y el rol entre paréntesis
                 const adminFullName = digitadorDisplay.replace(/\s*\([^)]*\)/g, '').trim(); 
                 const adminNameParts = adminFullName.split(' ').filter(p => p.length > 0);
                 
                 if (digitadorDisplay.includes('SUPERADMIN')) {
-                    // SUPERADMIN: Mantiene el CIP y (SUPERADMIN)
                     const match = digitadorDisplay.match(/([^\s]+)\s+\(([^)]+)\)/);
                     digitadorDisplay = match ? `${match[1]} (${match[2]})` : 'SUPERADMIN';
                 } else {
-                    // ADMIN NORMAL: Toma las dos primeras palabras del nombre (Ej: Katherin Giuliana)
                     if (adminNameParts.length >= 2) {
                         digitadorDisplay = `${adminNameParts[0]} ${adminNameParts[1]}`.trim();
                     } else {
-                        digitadorDisplay = adminNameParts.join(' ').trim() || record.cip; // Fallback al cip
+                        digitadorDisplay = adminNameParts.join(' ').trim() || record.cip; 
                     }
                 }
             }
             
-            // Datos en el orden de los encabezados (19 campos)
             dataRow.values = [
-                index + 1, // N
-                record.gguu, // GGUU
-                record.unidad, // UNIDAD
-                record.grado, // GRADO
-                `${(record.apellido || '').toUpperCase()}, ${record.nombre || ''}`, // APELLIDOS Y NOMBRES
-                record.dni, // DNI
-                record.cip, // CIP
-                record.sexo, // SEXO
-                record.edad, // EDAD
-                record.peso, // PESO
-                record.altura, // TALLA
-                record.pa, // PA
-                paClasificacion, // CLASIFICACION (PA)
-                record.pab, // PBA
-                riesgoAEnf, // RIESGO A ENF SEGUN PABD
-                record.imc, // IMC
-                clasificacionIMC, // CLASIFICACION DE IMC
-                record.motivo || 'N/A', // MOTIVO 
-                digitadorDisplay // DIGITADOR
+                index + 1, 
+                record.gguu, 
+                record.unidad, 
+                record.grado, 
+                `${(record.apellido || '').toUpperCase()}, ${record.nombre || ''}`, 
+                record.dni, 
+                record.cip, 
+                record.sexo, 
+                record.edad, 
+                record.peso, 
+                record.altura, 
+                record.pa, 
+                paClasificacion, 
+                record.pab, 
+                riesgoAEnf, 
+                record.imc, 
+                clasificacionIMC, 
+                record.motivo || 'N/A', 
+                digitadorDisplay 
             ];
             
-            // Aplicar formato a la fila (Solución para styles.xml)
             dataRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-                // Aplicar estilos base
                 cell.fill = DATA_FILL_STANDARD; 
                 cell.border = BORDER_THIN;
                 cell.font = FONT_NORMAL;
                 cell.alignment = { vertical: 'middle', horizontal: 'center' };
                 
-                // Col 17 (CLASIFICACION DE IMC)
                 if (colNumber === 17 && (resultado.includes('INAPTO') || clasificacionIMC.includes('OBESIDAD'))) {
                     cell.font = FONT_RED; 
                 }
                 
-                // Col 13 (CLASIFICACION PA)
                 if (colNumber === 13 && paClasificacion.includes('HIPERTENSION')) {
                     cell.font = FONT_RED;
                 }
-                // Col 15 (RIESGO A ENF SEGUN PABD)
                 if (colNumber === 15 && riesgoAEnf.includes('MUY ALTO')) {
                     cell.font = FONT_RED;
                 }
             });
         });
         
-        // --- 5. Títulos y Metadatos Adicionales ---
         worksheet.mergeCells('A1:S2');
         worksheet.getCell('A1').value = 'CONSOLIDADO DEL IMC DE LA III DE AF 2025';
         worksheet.getCell('A1').font = { name: 'Calibri', size: 16, bold: true };
         worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
         
         worksheet.mergeCells('A4:S4');
-        // USAR reportMonth RECIBIDO DEL CLIENTE
         worksheet.getCell('A4').value = `PESADA MENSUAL - ${reportMonth}`; 
         worksheet.getCell('A4').font = { name: 'Calibri', size: 14, bold: true };
         worksheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle' };
         
-        // --- 6. Configuración de Respuesta ---
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename=' + 'Reporte_SIMCEP_Mensual.xlsx');
         
-        // Escribir el archivo y enviarlo
         await workbook.xlsx.write(res);
         res.end();
 
@@ -462,144 +439,170 @@ app.post('/api/export-excel', async (req, res) => {
 
 // --- RUTAS DE API PARA USUARIOS Y LOGIN ---
 
-// [POST] /api/login
+// [POST] /api/login (Postgres)
 app.post('/api/login', (req, res) => {
     const { cip, password } = req.body;
     if (!cip || !password) return res.status(400).json({ message: "CIP y contraseña requeridos." });
-    const sql = "SELECT * FROM users WHERE cip = ?";
-    db.get(sql, [cip], (err, user) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!user) return res.status(401).json({ message: "Credenciales incorrectas." });
-        bcrypt.compare(password, user.password, (bcryptErr, result) => {
-            if (bcryptErr) return res.status(500).json({ message: "Error del servidor." });
-            if (result) {
-                res.json({ message: "Login exitoso", user: { cip: user.cip, fullName: user.fullName, role: user.role } });
-            } else {
-                res.status(401).json({ message: "Credenciales incorrectas." });
-            }
-        });
-    });
+    
+    const sql = "SELECT * FROM users WHERE cip = $1";
+    pool.query(sql, [cip])
+        .then(result => {
+            const user = result.rows[0];
+            if (!user) return res.status(401).json({ message: "Credenciales incorrectas." });
+            
+            bcrypt.compare(password, user.password, (bcryptErr, result) => {
+                if (bcryptErr) return res.status(500).json({ message: "Error del servidor." });
+                if (result) {
+                    res.json({ message: "Login exitoso", user: { cip: user.cip, fullName: user.fullName, role: user.role } });
+                } else {
+                    res.status(401).json({ message: "Credenciales incorrectas." });
+                }
+            });
+        })
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
-// [PUT] /api/users/password/:cip (Ruta faltante para edición)
+// [PUT] /api/users/password/:cip (Postgres)
 app.put('/api/users/password/:cip', (req, res) => {
     const { cip } = req.params;
     const { newPassword } = req.body;
     if (!newPassword) return res.status(400).json({ message: "Nueva contraseña requerida." });
+    
     bcrypt.hash(newPassword, 10, (err, hash) => {
         if (err) return res.status(500).json({ message: "Error al encriptar la contraseña." });
-        const sql = `UPDATE users SET password = ? WHERE cip = ?`;
-        db.run(sql, [hash, cip], function(err) {
-            if (err) return res.status(500).json({ message: "Error al actualizar la contraseña.", error: err.message });
-            if (this.changes === 0) return res.status(404).json({ message: "Usuario no encontrado." });
-            res.json({ message: "Contraseña actualizada." });
-        });
+        
+        const sql = `UPDATE users SET password = $1 WHERE cip = $2`;
+        pool.query(sql, [hash, cip])
+            .then(result => {
+                if (result.rowCount === 0) return res.status(404).json({ message: "Usuario no encontrado." });
+                res.json({ message: "Contraseña actualizada." });
+            })
+            .catch(err => res.status(500).json({ message: "Error al actualizar la contraseña.", error: err.message }));
     });
 });
 
 
-// [GET] /api/users
+// [GET] /api/users (Postgres)
 app.get('/api/users', (req, res) => {
     const sql = "SELECT cip, fullName, role FROM users";
-    db.all(sql, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+    pool.query(sql)
+        .then(result => res.json(result.rows))
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
-// [POST] /api/users
+// [POST] /api/users (Postgres)
 app.post('/api/users', (req, res) => {
     const { cip, fullName, password, email } = req.body;
     if (!cip || !fullName || !password) return res.status(400).json({ message: "CIP, Nombre y Contraseña requeridos." });
+    
     bcrypt.hash(password, 10, (err, hash) => {
         if (err) return res.status(500).json({ message: "Error al encriptar." });
-        const sql = "INSERT INTO users (cip, fullName, password, role, email) VALUES (?, ?, ?, ?, ?)";
-        db.run(sql, [cip, fullName, hash, 'admin', email || null], function(err) {
-            if (err) {
-                if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ message: `El CIP o Email ya está registrado.` });
+        
+        const sql = "INSERT INTO users (cip, fullName, password, role, email) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (cip) DO NOTHING RETURNING cip";
+        const values = [cip, fullName, hash, 'admin', email || null];
+
+        pool.query(sql, values)
+            .then(result => {
+                if (result.rowCount === 0) return res.status(409).json({ message: `El CIP ya está registrado.` });
+                res.status(201).json({ message: "Usuario creado.", cip: cip });
+            })
+            .catch(err => {
+                if (err.code === '23505') { // Código de error UNIQUE violation en Postgres
+                    return res.status(409).json({ message: `El CIP o Email ya está registrado.` });
+                }
                 return res.status(500).json({ error: err.message });
-            }
-            res.status(201).json({ message: "Usuario creado.", cip: cip });
-        });
+            });
     });
 });
 
-// [DELETE] /api/users/:cip
+// [DELETE] /api/users/:cip (Postgres)
 app.delete('/api/users/:cip', (req, res) => {
     const { cip } = req.params;
-    const sql = "DELETE FROM users WHERE cip = ?";
-    db.run(sql, cip, function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ message: "Usuario no encontrado." });
-        res.json({ message: `Usuario con CIP ${cip} eliminado.` });
-    });
+    const sql = "DELETE FROM users WHERE cip = $1";
+    pool.query(sql, [cip])
+        .then(result => {
+            if (result.rowCount === 0) return res.status(404).json({ message: "Usuario no encontrado." });
+            res.json({ message: `Usuario con CIP ${cip} eliminado.` });
+        })
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
 
 // --- NUEVAS RUTAS PARA RECUPERACIÓN DE CONTRASEÑA ---
 
-// [POST] /api/forgot-password
+// [POST] /api/forgot-password (Postgres)
 app.post('/api/forgot-password', (req, res) => {
     const { cip } = req.body;
-    const sql = `SELECT * FROM users WHERE cip = ?`;
-    db.get(sql, [cip], (err, user) => {
-        if (err || !user || !user.email) {
-            return res.json({ message: "Si existe una cuenta asociada a este CIP, se ha enviado un correo de recuperación." });
-        }
-        const token = crypto.randomBytes(20).toString('hex');
-        const expires = Date.now() + 3600000; // 1 hora
-        const updateSql = `UPDATE users SET resetPasswordToken = ?, resetPasswordExpires = ? WHERE cip = ?`;
-        db.run(updateSql, [token, expires, cip], async function(err) {
-            if (err) return res.status(500).json({ message: "Error al preparar la recuperación." });
-
-            const emailUser = 'francis.swag.05@gmail.com';
-            const emailPass = 'itgoxxnazoxgutxm';
-
-            if (!emailUser || !emailPass || emailUser.includes('TU_CORREO')) {
-                console.error("ERROR: Credenciales de Nodemailer no configuradas.");
-                return res.status(500).json({ message: "Servicio de correo no configurado." });
+    const selectSql = `SELECT * FROM users WHERE cip = $1`;
+    
+    pool.query(selectSql, [cip])
+        .then(result => {
+            const user = result.rows[0];
+            if (!user || !user.email) {
+                return res.json({ message: "Si existe una cuenta asociada a este CIP, se ha enviado un correo de recuperación." });
             }
-            const transporter = nodemailer.createTransport({
-                service: 'gmail',
-                auth: { user: emailUser, pass: emailPass }
-            });
-            const mailOptions = {
-                from: `"SIMCEP Admin" <${emailUser}>`,
-                to: user.email,
-                subject: 'Restablecimiento de Contraseña - SIMCEP',
-                text: `Ha solicitado un restablecimiento de contraseña.\n\n` +
-                      `Haga clic en el siguiente enlace para completar el proceso:\n\n` +
-                      `https://imc-ep.fly.dev/reset.html?token=${token}\n\n` +
-                      `Si no solicitó esto, ignore este correo.\n`
-            };
-            try {
-                await transporter.sendMail(mailOptions);
-                res.json({ message: "Si existe una cuenta asociada a este CIP, se ha enviado un correo de recuperación." });
-            } catch (error) {
-                console.error("Error al enviar el correo:", error);
-                res.status(500).json({ message: "Error al enviar el correo." });
-            }
-        });
-    });
+            
+            const token = crypto.randomBytes(20).toString('hex');
+            const expires = Date.now() + 3600000; // 1 hora
+            const updateSql = `UPDATE users SET resetPasswordToken = $1, resetPasswordExpires = $2 WHERE cip = $3`;
+            
+            pool.query(updateSql, [token, expires, cip])
+                .then(async () => {
+                    const emailUser = 'francis.swag.05@gmail.com';
+                    const emailPass = 'itgoxxnazoxgutxm';
+
+                    if (!emailUser || !emailPass) {
+                        console.error("ERROR: Credenciales de Nodemailer no configuradas.");
+                        return res.status(500).json({ message: "Servicio de correo no configurado." });
+                    }
+                    const transporter = nodemailer.createTransport({
+                        service: 'gmail',
+                        auth: { user: emailUser, pass: emailPass }
+                    });
+                    const mailOptions = {
+                        from: `"SIMCEP Admin" <${emailUser}>`,
+                        to: user.email,
+                        subject: 'Restablecimiento de Contraseña - SIMCEP',
+                        text: `Ha solicitado un restablecimiento de contraseña.\n\n` +
+                              `Haga clic en el siguiente enlace para completar el proceso:\n\n` +
+                              `[Tu URL de Railway]/reset.html?token=${token}\n\n` +
+                              `Si no solicitó esto, ignore este correo.\n`
+                    };
+                    try {
+                        await transporter.sendMail(mailOptions);
+                        res.json({ message: "Si existe una cuenta asociada a este CIP, se ha enviado un correo de recuperación." });
+                    } catch (error) {
+                        console.error("Error al enviar el correo:", error);
+                        res.status(500).json({ message: "Error al enviar el correo." });
+                    }
+                })
+                .catch(err => res.status(500).json({ message: "Error al preparar la recuperación.", error: err.message }));
+        })
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
-// [POST] /api/reset-password
+// [POST] /api/reset-password (Postgres)
 app.post('/api/reset-password', (req, res) => {
     const { token, password } = req.body;
-    const sql = `SELECT * FROM users WHERE resetPasswordToken = ? AND resetPasswordExpires > ?`;
-    db.get(sql, [token, Date.now()], (err, user) => {
-        if (err || !user) {
-            return res.status(400).json({ message: "El token de restablecimiento es inválido o ha expirado." });
-        }
-        bcrypt.hash(password, 10, (err, hash) => {
-            if (err) return res.status(500).json({ message: "Error al encriptar." });
-            const updateSql = `UPDATE users SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE cip = ?`;
-            db.run(updateSql, [hash, user.cip], function(err) {
-                if (err) return res.status(500).json({ message: "Error al actualizar la contraseña." });
-                res.json({ message: "¡Contraseña actualizada con éxito! Ahora puede iniciar sesión." });
+    const selectSql = `SELECT * FROM users WHERE resetPasswordToken = $1 AND resetPasswordExpires > $2`;
+    
+    pool.query(selectSql, [token, Date.now()])
+        .then(result => {
+            const user = result.rows[0];
+            if (!user) {
+                return res.status(400).json({ message: "El token de restablecimiento es inválido o ha expirado." });
+            }
+            
+            bcrypt.hash(password, 10, (err, hash) => {
+                if (err) return res.status(500).json({ message: "Error al encriptar." });
+                
+                const updateSql = `UPDATE users SET password = $1, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE cip = $2`;
+                pool.query(updateSql, [hash, user.cip])
+                    .then(() => res.json({ message: "¡Contraseña actualizada con éxito! Ahora puede iniciar sesión." }))
+                    .catch(err => res.status(500).json({ message: "Error al actualizar la contraseña.", error: err.message }));
             });
-        });
-    });
+        })
+        .catch(err => res.status(500).json({ error: err.message }));
 });
 
 
@@ -607,4 +610,3 @@ app.post('/api/reset-password', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor SIMCEP corriendo en http://0.0.0.0:${PORT}`);
 });
-```

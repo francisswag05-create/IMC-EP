@@ -427,6 +427,7 @@ async function attemptAdminLogin() {
     const password = document.getElementById('admin-password').value;
 
     try {
+        // La ruta /api/login es la misma, pero el backend ahora es Postgres
         const response = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -477,9 +478,11 @@ async function handleForgotPassword() {
     link.classList.add('pointer-events-none', 'opacity-50');
 
     try {
+        const resetPasswordLink = `${window.location.origin}/reset.html?token=`; // <<< CORRECCIÓN PARA RAILWAY/CUALQUIER SERVIDOR
+        
         await fetch('/api/forgot-password', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Reset-Link': resetPasswordLink }, // <<< ENVIAR LA URL BASE
             body: JSON.stringify({ cip: cip.trim() })
         });
 
@@ -504,6 +507,7 @@ async function handleForgotPassword() {
 
 async function fetchAndDisplayRecords() {
     try {
+        // La ruta /api/records es la misma
         const response = await fetch('/api/records');
         if (!response.ok) throw new Error('Error al obtener los registros del servidor.');
         allRecordsFromDB = await response.json();
@@ -1027,7 +1031,7 @@ function exportToWord() {
         const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
         
         // CLASIFICACIÓN SIMPLIFICADA: SOLO MUESTRA EL TEXTO (ej: NORMAL)
-        let clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
+        let clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : record.motivo.toUpperCase(); // <<< CORREGIDO AQUÍ
         
         htmlContent += `<tr>
             <td style="${cellStyle}">${record.unidad || 'N/A'}</td>
@@ -1059,7 +1063,6 @@ function exportToWord() {
     const link = document.createElement('a');
     link.href = url;
     document.body.appendChild(link);
-    link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
@@ -1189,7 +1192,6 @@ async function exportStatsToWord() {
     link.href = downloadUrl;
     link.download = filename; 
     document.body.appendChild(link);
-    link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(downloadUrl);
     displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
@@ -1218,7 +1220,6 @@ function downloadChartAsImage() {
     a.href = imageURL;
     a.download = filename;
     document.body.appendChild(a);
-    a.click();
     document.body.removeChild(a);
     
     displayMessage('ÉXITO', `Gráfica descargada como ${filename}.`, 'success');
@@ -1523,4 +1524,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateUI();
 });
-```
