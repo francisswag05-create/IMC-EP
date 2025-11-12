@@ -1,6 +1,5 @@
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
-// const sqlite3 = require('sqlite3').verbose(); // <<< ELIMINADO
 const { Pool } = require('pg'); // <<< AÑADIDO: Paquete de PostgreSQL
 const bcrypt = require('bcrypt');
 const path = require('path');
@@ -10,7 +9,6 @@ const crypto = require('crypto');
 const ExcelJS = require('exceljs'); 
 
 const app = express();
-// Railway utiliza la variable PORT para el puerto interno del contenedor
 const PORT = process.env.PORT || 3000; 
 
 // --- 2. MIDDLEWARE ---
@@ -19,18 +17,13 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '/'))); 
 
 // --- 3. CONEXIÓN A LA BASE DE DATOS POSTGRESQL (Railway) ---
-// Railway inyecta la variable de entorno DATABASE_URL
 const pool = new Pool({
-    // Utiliza la variable de entorno de Railway
     connectionString: process.env.DATABASE_URL, 
-    // Esto es necesario para la conexión segura en la nube
     ssl: { rejectUnauthorized: false } 
 });
 
-// Función auxiliar para las consultas (reemplaza a db.all/db.get/db.run de SQLite)
-// En Postgres, usamos $1, $2, etc., en lugar de ?, ?, ?
+// Función auxiliar para las consultas
 function dbQueryPromise(sql, params = []) {
-    // Si la conexión no se ha iniciado, devolvemos un error
     if (!process.env.DATABASE_URL) {
         return Promise.reject(new Error("La variable DATABASE_URL de Railway no está configurada."));
     }
@@ -48,6 +41,8 @@ async function initializeDatabase() {
     const client = await pool.connect();
     try {
         // Ejecución de la creación de tablas (Postgres usa SERIAL PRIMARY KEY y tipos específicos)
+        
+        // COMANDO 1: Crear la tabla USERS (Separado para evitar errores de sintaxis)
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 cip VARCHAR(50) PRIMARY KEY,
@@ -56,19 +51,37 @@ async function initializeDatabase() {
                 role VARCHAR(50) NOT NULL,
                 email VARCHAR(255) UNIQUE,
                 resetPasswordToken VARCHAR(255),
-                resetPasswordExpires BIGINT
+                resetPasswordExpires VARCHAR(255) -- Usar VARCHAR en lugar de BIGINT para evitar problemas de tipo
             );
+        `);
+        
+        // COMANDO 2: Crear la tabla RECORDS (Separado)
+        await client.query(`
             CREATE TABLE IF NOT EXISTS records (
                 id SERIAL PRIMARY KEY, 
-                gguu VARCHAR(50), unidad VARCHAR(100), dni VARCHAR(50), pa VARCHAR(50), pab REAL, paClasificacion VARCHAR(50), riesgoAEnf VARCHAR(50), 
-                sexo VARCHAR(50), cip VARCHAR(50), grado VARCHAR(50), apellido VARCHAR(100),
-                nombre VARCHAR(100), edad INTEGER, peso REAL, altura REAL, 
-                imc REAL, fecha VARCHAR(50),
+                gguu VARCHAR(50), 
+                unidad VARCHAR(100), 
+                dni VARCHAR(50), 
+                pa VARCHAR(50), 
+                pab REAL, 
+                paClasificacion VARCHAR(50), 
+                riesgoAEnf VARCHAR(50), 
+                sexo VARCHAR(50), 
+                cip VARCHAR(50), 
+                grado VARCHAR(50), 
+                apellido VARCHAR(100),
+                nombre VARCHAR(100), 
+                edad INTEGER, 
+                peso REAL, 
+                altura REAL, 
+                imc REAL, 
+                fecha VARCHAR(50),
                 registradoPor VARCHAR(255),
                 motivo VARCHAR(50),
                 dob VARCHAR(50)
             );
         `);
+        
         console.log("Tablas de base de datos listas.");
         
         // *** CÓDIGO TEMPORAL: INSERCIÓN DE USUARIO SUPERADMIN POR DEFECTO ***
@@ -90,8 +103,9 @@ async function initializeDatabase() {
         // *** FIN DEL CÓDIGO TEMPORAL ***
         
     } catch (err) {
-        console.error("Error FATAL al conectar con la base de datos:", err.message);
-        process.exit(1); 
+        console.error("Error FATAL al inicializar la base de datos:", err.message);
+        // Lanzamos el error para que Railway lo capture, pero NO forzamos process.exit
+        throw err; 
     } finally {
         client.release();
     }
@@ -127,7 +141,7 @@ app.get('/api/stats', (req, res) => {
     let params = [];
 
     // Nota: La sintaxis de los parámetros se ajusta a Postgres ($1, $2, etc.)
-    if (cip) { sql += " AND cip = $1"; params.push(cip); }
+    if (cip) { sql += ` AND cip = $${params.length + 1}`; params.push(cip); }
     if (gguu) { sql += ` AND gguu = $${params.length + 1}`; params.push(gguu); }
     if (unidad) { sql += ` AND unidad = $${params.length + 1}`; params.push(unidad); }
     if (sexo) { sql += ` AND sexo = $${params.length + 1}`; params.push(sexo); }
@@ -522,7 +536,7 @@ app.delete('/api/users/:cip', (req, res) => {
     pool.query(sql, [cip])
         .then(result => {
             if (result.rowCount === 0) return res.status(404).json({ message: "Usuario no encontrado." });
-            res.json({ message: `Usuario con CIP ${cip} eliminado.` });
+            res.json({ message: `Registro con ID ${id} eliminado.` });
         })
         .catch(err => res.status(500).json({ error: err.message }));
 });
