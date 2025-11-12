@@ -1351,11 +1351,15 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
     // *** SOLUCIÓN FLEXIBILIDAD: CAPTURA DE MES DE REGISTRO (YYYY-MM) ***
     const registroMonthYear = form.elements['input-registro-month'].value; 
     
-    if (!registroMonthYear) {
-        displayMessage('Error de Entrada', 'Debe seleccionar el Mes del Registro.', 'error');
+    // CORRECCIÓN CRÍTICA (FINAL): Validar formato YYYY-MM correctamente
+    if (!registroMonthYear || registroMonthYear.length !== 7 || !registroMonthYear.includes('-')) {
+        displayMessage('Error de Entrada', 'El Mes de Registro debe tener el formato YYYY-MM (Ej: 2025-11).', 'error');
+        document.getElementById('admin-result-box').classList.add('hidden');
         return;
     }
+    
     const [regYear, regMonth] = registroMonthYear.split('-');
+    
     // Formato que la DB usa para la FECHA: DD/MM/YYYY (Usamos 01 para el día)
     const formattedDate = `01/${regMonth}/${regYear}`; 
     // Formato que la DB usa para la UNICIDAD: MM/YYYY
@@ -1364,6 +1368,7 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
 
 
     // VALIDACIÓN DE CAMPOS CLAVE
+    // Si la altura es 7.71 (como en tu captura), imc será bajísimo, pero el sistema lo aceptará si es > 0.
     if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 0 && gguu && unidad && dni && pa) {
         
         // *** INICIO DE LA REGLA DE UNICIDAD MENSUAL (CORRECCIÓN CRÍTICA APLICADA) ***
@@ -1423,10 +1428,18 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
         if (isEditMode) {
             // AÑADIR TODOS LOS CAMPOS (Motivo, DOB y FECHA seleccionada)
             const updatedRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo: motivoInapto, dob: dob, fecha: formattedDate }; 
+            
+            // LOG DE DEBUG
+            console.log("Datos a enviar para ACTUALIZAR:", updatedRecord); 
+            
             updateRecord(currentEditingRecordId, updatedRecord);
         } else {
             // AÑADIR TODOS LOS CAMPOS (Motivo, DOB y FECHA seleccionada)
             const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: digitadorFinal, motivo: motivoInapto, dob: dob }; // <<-- USAMOS formattedDate
+            
+            // LOG DE DEBUG
+            console.log("Datos a enviar para GUARDAR:", newRecord); 
+            
             saveRecord(newRecord);
         }
     } else {
