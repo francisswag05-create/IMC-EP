@@ -480,11 +480,17 @@ async function handleForgotPassword() {
     try {
         const resetPasswordLink = `${window.location.origin}/reset.html?token=`; // <<< CORRECCIÓN PARA RAILWAY/CUALQUIER SERVIDOR
         
-        await fetch('/api/forgot-password', {
+        // CORRECCIÓN: Usar el header para enviar la URL base al backend
+        const response = await fetch('/api/forgot-password', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Reset-Link': resetPasswordLink }, // <<< ENVIAR LA URL BASE
+            headers: { 'Content-Type': 'application/json', 'X-Reset-Link': resetPasswordLink }, 
             body: JSON.stringify({ cip: cip.trim() })
         });
+        
+        if (!response.ok) {
+             const data = await response.json();
+             throw new Error(data.message || 'Error en la solicitud de recuperación.');
+        }
 
         displayMessage(
             'CORREO ENVIADO', 
@@ -494,7 +500,7 @@ async function handleForgotPassword() {
 
     } catch (error) {
         console.error("Error en solicitud de recuperación:", error);
-        displayMessage('ERROR', 'Ocurrió un error de conexión al solicitar la recuperación.', 'error');
+        displayMessage('ERROR', error.message || 'Ocurrió un error de conexión al solicitar la recuperación.', 'error');
 
     } finally {
         link.textContent = '¿Olvidó su contraseña?';
@@ -908,7 +914,7 @@ function renderProgressionChart(records) {
 function renderTable(records) {
     const tableBody = document.getElementById('admin-table-body');
     tableBody.innerHTML = '';
-    // COLSPAN_VALUE AJUSTADO A 12
+    // COLSPAN_VALUE AJUSTADO
     const COLSPAN_VALUE = 12; 
     if (!isAuthenticated) {
         tableBody.innerHTML = `<tr><td colspan="${COLSPAN_VALUE}" class="text-center py-4">No está autenticado.</td></tr>`;
@@ -1031,7 +1037,7 @@ function exportToWord() {
         const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
         
         // CLASIFICACIÓN SIMPLIFICADA: SOLO MUESTRA EL TEXTO (ej: NORMAL)
-        let clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : record.motivo.toUpperCase(); // <<< CORREGIDO AQUÍ
+        let clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
         
         htmlContent += `<tr>
             <td style="${cellStyle}">${record.unidad || 'N/A'}</td>
@@ -1363,7 +1369,7 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
         if (!isEditMode) {
             // CAMBIO CLAVE: Enviamos el mes objetivo como query param
             const checkResponse = await fetch(`/api/records/check-monthly/${cip}?targetMonthYear=${formattedMonthYear}`);
-            const checkData = await checkResponse.json();
+            const checkData = await response.json(); // <<< ERROR AQUÍ: USAR checkResponse.json()
 
             if (checkData.alreadyRecorded) {
                 displayMessage('REGISTRO DUPLICADO', checkData.message, 'warning');
