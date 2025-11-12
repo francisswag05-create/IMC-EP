@@ -536,7 +536,8 @@ async function saveRecord(record) {
             body: JSON.stringify(record)
         });
         if (!response.ok) {
-            const errorData = await response.json();
+            // Intenta leer el JSON del error, si no puede, usa un mensaje genérico.
+            const errorData = await response.json().catch(() => ({ message: 'Error desconocido al guardar el registro. Verifique logs del servidor.' }));
             throw new Error(errorData.message || 'Error al guardar el registro.');
         }
         displayMessage('REGISTRO EXITOSO', `Personal con CIP ${record.cip} ha sido guardado en la base de datos.`, 'success');
@@ -1365,25 +1366,40 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
     // VALIDACIÓN DE CAMPOS CLAVE
     if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 0 && gguu && unidad && dni && pa) {
         
-        // *** INICIO DE LA REGLA DE UNICIDAD MENSUAL (MODIFICADA) ***
+        // *** INICIO DE LA REGLA DE UNICIDAD MENSUAL (CORRECCIÓN CRÍTICA APLICADA) ***
         if (!isEditMode) {
-            // CAMBIO CLAVE: Enviamos el mes objetivo como query param
-            const checkResponse = await fetch(`/api/records/check-monthly/${cip}?targetMonthYear=${formattedMonthYear}`);
-            
-            // CORRECCIÓN FINAL: Usar checkResponse.json()
-            const checkData = await checkResponse.json(); 
+            try { // <<-- AÑADIDO: Bloque try para manejar errores de fetch/promesa
+                
+                // CAMBIO CLAVE: Enviamos el mes objetivo como query param
+                const checkResponse = await fetch(`/api/records/check-monthly/${cip}?targetMonthYear=${formattedMonthYear}`);
+                
+                if (!checkResponse.ok) { // <<-- Manejo de errores HTTP
+                    // Intenta leer el cuerpo del error, si falla, usa un mensaje genérico.
+                    const errorData = await checkResponse.json().catch(() => ({ message: 'Error desconocido del servidor.' }));
+                    throw new Error(errorData.message || `Error en la verificación de duplicados (${checkResponse.status}).`);
+                }
+                
+                const checkData = await checkResponse.json(); 
 
-            if (checkData.alreadyRecorded) {
-                displayMessage('REGISTRO DUPLICADO', checkData.message, 'warning');
+                if (checkData.alreadyRecorded) {
+                    displayMessage('REGISTRO DUPLICADO', checkData.message, 'warning');
+                    document.getElementById('admin-result-box').classList.add('hidden');
+                    return; // <<-- BLOQUEAR EL GUARDADO
+                }
+                
+                // Si se crearon registros faltantes, mostrar alerta
+                if (checkData.missingRecordsCreated) {
+                    displayMessage('REGISTROS CREADOS', `Se crearon ${checkData.count} registros de 'NO ASISTIÓ' para los meses faltantes.`, 'success');
+                    // Esperar a que la tabla se actualice con los registros 'NO ASISTIÓ' antes de guardar el registro actual
+                    await fetchAndDisplayRecords(); 
+                }
+                
+            } catch (error) {
+                // Captura el ReferenceError, error de red, o el error que lanzamos arriba
+                displayMessage('ERROR DE VERIFICACIÓN', error.message, 'error');
+                console.error("Error en la verificación de unicidad:", error);
                 document.getElementById('admin-result-box').classList.add('hidden');
-                return; // <<-- BLOQUEAR EL GUARDADO
-            }
-            
-            // Si se crearon registros faltantes, mostrar alerta
-            if (checkData.missingRecordsCreated) {
-                displayMessage('REGISTROS CREADOS', `Se crearon ${checkData.count} registros de 'NO ASISTIÓ' para los meses faltantes.`, 'success');
-                // Esperar a que la tabla se actualice con los registros 'NO ASISTIÓ' antes de guardar el registro actual
-                await fetchAndDisplayRecords(); 
+                return; // <<-- BLOQUEAR EL GUARDADO SI EL FETCH FALLA
             }
         }
         // *** FIN DE LA REGLA DE UNICIDAD MENSUAL ***
