@@ -1369,7 +1369,9 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
         if (!isEditMode) {
             // CAMBIO CLAVE: Enviamos el mes objetivo como query param
             const checkResponse = await fetch(`/api/records/check-monthly/${cip}?targetMonthYear=${formattedMonthYear}`);
-            const checkData = await response.json(); // <<< ERROR AQUÍ: USAR checkResponse.json()
+            
+            // CORRECCIÓN FINAL: Usar checkResponse.json()
+            const checkData = await checkResponse.json(); 
 
             if (checkData.alreadyRecorded) {
                 displayMessage('REGISTRO DUPLICADO', checkData.message, 'warning');
@@ -1465,7 +1467,9 @@ async function fetchAndAutoFill(queryType, queryValue) {
         document.getElementById('input-role').value = patientData.grado || '';   // <<-- Autocompletar GRADO
         document.getElementById('input-sex-admin').value = patientData.sexo || 'Masculino';
         document.getElementById('input-lastname').value = patientData.apellido || '';
-        document.getElementById('input-firstname').value = patientData.nombre || '';
+        // CORRECCIÓN: Si el nombre del paciente es null/undefined, no hacer split
+        const patientFirstName = patientData.nombre || '';
+        document.getElementById('input-firstname').value = patientFirstName;
         
         // Rellenar edad y DOB
         document.getElementById('input-age-admin').value = patientData.edad || '';
