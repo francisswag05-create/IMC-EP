@@ -1351,7 +1351,7 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
     // *** SOLUCIÓN FLEXIBILIDAD: CAPTURA DE MES DE REGISTRO (YYYY-MM) ***
     const registroMonthYear = form.elements['input-registro-month'].value; 
     
-    // CORRECCIÓN CRÍTICA (FINAL): Validar formato YYYY-MM correctamente
+    // ** CORRECCIÓN DE LA VALIDACIÓN DEL FORMATO YYYY-MM **
     if (!registroMonthYear || registroMonthYear.length !== 7 || !registroMonthYear.includes('-')) {
         displayMessage('Error de Entrada', 'El Mes de Registro debe tener el formato YYYY-MM (Ej: 2025-11).', 'error');
         document.getElementById('admin-result-box').classList.add('hidden');
@@ -1368,12 +1368,11 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
 
 
     // VALIDACIÓN DE CAMPOS CLAVE
-    // Si la altura es 7.71 (como en tu captura), imc será bajísimo, pero el sistema lo aceptará si es > 0.
     if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 0 && gguu && unidad && dni && pa) {
         
         // *** INICIO DE LA REGLA DE UNICIDAD MENSUAL (CORRECCIÓN CRÍTICA APLICADA) ***
         if (!isEditMode) {
-            try { // <<-- AÑADIDO: Bloque try para manejar errores de fetch/promesa
+            try { // <<-- Bloque try para manejar errores de fetch/promesa
                 
                 // CAMBIO CLAVE: Enviamos el mes objetivo como query param
                 const checkResponse = await fetch(`/api/records/check-monthly/${cip}?targetMonthYear=${formattedMonthYear}`);
