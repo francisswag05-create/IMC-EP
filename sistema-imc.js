@@ -15,6 +15,12 @@ function displayMessage(title, text, type) {
     const titleEl = box.querySelector('p:nth-child(1)');
     const textEl = box.querySelector('p:nth-child(2)');
 
+    // Manejo de null/undefined si la caja no existe (ej: en la página reset.html)
+    if (!box) {
+        console.warn(`[DisplayMessage] ${title}: ${text}`);
+        return; 
+    }
+
     box.classList.remove('hidden', 'bg-red-600', 'bg-yellow-600', 'bg-green-600');
     let bgColor = '';
     if (type === 'error' || type === 'alert') bgColor = 'bg-red-600';
@@ -36,6 +42,8 @@ function displayMessage(title, text, type) {
 
 async function fetchAndDisplayUsers() {
     const tableBody = document.getElementById('users-table-body');
+    if (!tableBody) return; // Salir si no estamos en la vista de administración
+
     try {
         const response = await fetch('/api/users');
         if (!response.ok) throw new Error('No se pudieron cargar los usuarios.');
@@ -49,8 +57,7 @@ async function fetchAndDisplayUsers() {
         }
 
         users.forEach(user => {
-            // --- LÓGICA DE VISUALIZACIÓN MODIFICADA ---
-            let userFullNameDisplay = `${user.fullName}`; // Por defecto, nombre completo
+            let userFullNameDisplay = `${user.fullName}`;
             
             if (user.role === 'admin') {
                 userFullNameDisplay = `${user.fullName} (ADMINISTRADOR)`;
@@ -58,18 +65,14 @@ async function fetchAndDisplayUsers() {
                 userFullNameDisplay = `${user.fullName} (SUPERADMIN)`;
             }
 
-
             const row = tableBody.insertRow();
-
             row.innerHTML = `
                 <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${user.cip}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-sm">${userFullNameDisplay}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-center">
-                    <!-- BOTÓN DE EDICIÓN/CAMBIO DE CLAVE -->
                     <button onclick="handleEditUser('${user.cip}')" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Cambiar Contraseña">
                         <i class="fas fa-pencil-alt"></i>
                     </button>
-                    <!-- BOTÓN DE ELIMINAR -->
                     <button onclick="handleDeleteUser('${user.cip}')" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Usuario">
                         <i class="fas fa-trash-alt"></i>
                     </button>
@@ -87,14 +90,13 @@ async function handleAddUser(event) {
     event.preventDefault();
     const cip = document.getElementById('input-new-cip').value;
     const fullName = document.getElementById('input-new-fullname').value;
-    const email = document.getElementById('input-new-email').value; // <-- CAPTURA DE EMAIL
+    const email = document.getElementById('input-new-email').value;
     const password = document.getElementById('input-new-password').value;
 
     try {
         const response = await fetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            // ENVIAR EMAIL
             body: JSON.stringify({ cip, fullName, email, password })
         });
         const data = await response.json();
@@ -144,7 +146,6 @@ function handleEditUser(cip) {
 
 async function updateUserPassword(cip, newPassword) {
     try {
-        // Llama a la nueva ruta en el servidor
         const response = await fetch(`/api/users/password/${cip}`, { 
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -170,6 +171,8 @@ async function updateUI() {
     const monitoringTextEl = document.getElementById('monitoring-status-text');
     const userManagementSection = document.getElementById('user-management-section');
 
+    if (!publicView || !adminView || !userInfo) return; // Salir si no estamos en la página principal
+
     if (isAuthenticated) {
         publicView.classList.add('hidden-view');
         adminView.classList.remove('hidden-view');
@@ -192,7 +195,8 @@ async function updateUI() {
         }
         
         updateAdminTableHeaders();
-        await fetchAndDisplayRecords();
+        // Llamar a la función de carga de registros
+        await fetchAndDisplayRecords(); 
         
         if (currentUserRole === 'superadmin') {
             await fetchAndDisplayUsers();
@@ -205,8 +209,11 @@ async function updateUI() {
         userInfo.classList.remove('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
         userInfo.classList.add('text-color-accent-lime', 'border-gray-600');
         
-        document.getElementById('admin-username').value = '';
-        document.getElementById('admin-password').value = '';
+        const adminUsernameEl = document.getElementById('admin-username');
+        const adminPasswordEl = document.getElementById('admin-password');
+
+        if (adminUsernameEl) adminUsernameEl.value = '';
+        if (adminPasswordEl) adminPasswordEl.value = '';
 
         if (monitoringTextEl) {
             monitoringTextEl.innerHTML = '¡Sistema en espera! Inicie sesión para activar el monitoreo.';
@@ -241,7 +248,6 @@ function updateAdminTableHeaders() {
 
 // SIMPLIFICADA PARA SOLO APTO/INAPTO
 function getSimplifiedAptitudeStyle(resultado) {
-    // Ya que el resultado final solo será 'APTO' o 'INAPTO', esta función es simple.
     if (resultado.startsWith('INAPTO')) return 'bg-red-700 text-white';
     return 'bg-green-700 text-white'; 
 }
@@ -254,8 +260,6 @@ function calculateIMC(weight, height) {
         const imc = weight / (height * height);
         return imc.toFixed(1);
     }
-    // NOTA: Usamos 0.01 de altura para registros "NO ASISTIÓ" en el backend,
-    // por lo que este valor debe ser seguro para la división.
     return 0; 
 }
 
@@ -276,8 +280,7 @@ function calculateAge(dateOfBirth) {
 // --- NUEVA FUNCIÓN PARA CLASIFICAR PRESIÓN ARTERIAL (CLASIFICACION) ---
 function getClassificacionPA(paString) {
     if (!paString || !paString.includes('/')) return 'N/A';
-    // Si el valor es N/A (como en NO ASISTIÓ), devolver N/A
-    if (paString === 'N/A') return 'N/A';
+    if (paString.toUpperCase() === 'N/A') return 'N/A';
 
     const [sistolicaStr, diastolicaStr] = paString.split('/');
     const sistolica = parseInt(sistolicaStr);
@@ -294,16 +297,14 @@ function getClassificacionPA(paString) {
 // --- Función getRiskByWaist (RIESGO A ENF SEGUN PAB - AJUSTADO A CUADRO 2 OMS) ---
 function getRiskByWaist(sexo, pab) {
     const pabFloat = parseFloat(pab);
-    if (pabFloat === 0) return 'N/A'; // Para registros NO ASISTIÓ
+    if (pabFloat === 0) return 'N/A';
 
     if (sexo === 'Masculino') {
-        // Riesgo Bajo: < 94. Riesgo Alto: >= 94. Riesgo Muy Alto: >= 102
         if (pabFloat < 94) return 'RIESGO BAJO'; 
         if (pabFloat < 102) return 'RIESGO ALTO';
         return 'RIESGO MUY ALTO'; 
     } 
     
-    // Femenino: Riesgo Bajo: < 80. Riesgo Alto: >= 80. Riesgo Muy Alto: >= 88
     if (sexo === 'Femenino') {
         if (pabFloat < 80) return 'RIESGO BAJO';
         if (pabFloat < 88) return 'RIESGO ALTO'; 
@@ -321,7 +322,6 @@ function getAptitude(imc, sexo, pab, paString) {
     
     // *** MODIFICACIÓN PRINCIPAL: Manejo de NO ASISTIÓ/Registro Vacío ***
     if (imcFloat === 0 && pabFloat === 0 && paString === 'N/A') {
-         // Este es un registro de NO ASISTIÓ creado por el sistema
         clasificacionMINSA = "NO ASISTIÓ";
         resultado = "INAPTO (NO ASISTIÓ)";
         detalle = "Registro generado automáticamente por inasistencia mensual.";
@@ -335,7 +335,6 @@ function getAptitude(imc, sexo, pab, paString) {
             motivoInapto: 'NO ASISTIÓ'
         };
     }
-    // *** FIN MODIFICACIÓN NO ASISTIÓ ***
     
     // 1. Clasificación MINSA (Clasificación de IMC - FIEL A LA TABLA OMS)
     if (imcFloat < 18.5) clasificacionMINSA = "BAJO PESO";
@@ -352,7 +351,6 @@ function getAptitude(imc, sexo, pab, paString) {
     const paClasificacion = getClassificacionPA(paString);
     
     // 4. Determinación de Aptitud (Regla Estándar de INAPTO - Simplificada)
-    
     let esAptoInicial = true;
     let motivoInapto = "";
 
@@ -372,7 +370,6 @@ function getAptitude(imc, sexo, pab, paString) {
     }
 
     // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (LA REGLA DEL PAB ANULADOR)
-    // Regla: Si el resultado inicial es INAPTO, PERO el PAB es estrictamente < 94 (H) o < 80 (M), se sobrescribe a APTO.
     let aplicaExcepcion = false;
     let umbralExcepcion;
 
@@ -396,17 +393,14 @@ function getAptitude(imc, sexo, pab, paString) {
         resultado = "APTO";
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Riesgo Abdominal: ${riesgoAEnf}. PA: ${paClasificacion}. Aptitud confirmada.`;
     } else {
-        // Es INAPTO
         resultado = "INAPTO (" + motivoInapto + ")";
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Motivo: ${motivoInapto}. INAPTO.`;
     }
     
-    // Si la PA no es NORMAL y el resultado es APTO, mantendremos el detalle informativo
     if (resultado.startsWith('APTO') && (paClasificacion === 'HIPERTENSION' || paClasificacion === 'PRE-HIPERTENSION')) {
         detalle += ` NOTA: Vigilancia por PA: ${paClasificacion}.`;
     }
 
-    // El resultado final para el filtro se simplifica:
     const resultadoSimplificado = resultado.startsWith('APTO') ? 'APTO' : 'INAPTO';
 
     return { 
@@ -415,7 +409,7 @@ function getAptitude(imc, sexo, pab, paString) {
         clasificacionMINSA, 
         paClasificacion, 
         riesgoAEnf,
-        motivoInapto: motivoInapto || 'APTO' // <<-- CORREGIDO: Devolver motivoInapto para Excel
+        motivoInapto: motivoInapto || 'APTO'
     };
 }
 
@@ -427,7 +421,6 @@ async function attemptAdminLogin() {
     const password = document.getElementById('admin-password').value;
 
     try {
-        // La ruta /api/login es la misma, pero el backend ahora es Postgres
         const response = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -474,16 +467,16 @@ async function handleForgotPassword() {
     }
     
     const link = document.getElementById('forgot-password-link');
+    if (!link) return; 
+
     link.textContent = 'Enviando Solicitud...';
     link.classList.add('pointer-events-none', 'opacity-50');
 
     try {
-        const resetPasswordLink = `${window.location.origin}/reset.html?token=`; // <<< CORRECCIÓN PARA RAILWAY/CUALQUIER SERVIDOR
-        
-        // CORRECCIÓN: Usar el header para enviar la URL base al backend
+        // Enviar la solicitud de recuperación
         const response = await fetch('/api/forgot-password', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Reset-Link': resetPasswordLink }, 
+            headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ cip: cip.trim() })
         });
         
@@ -513,18 +506,23 @@ async function handleForgotPassword() {
 
 async function fetchAndDisplayRecords() {
     try {
-        // La ruta /api/records es la misma
         const response = await fetch('/api/records');
         if (!response.ok) throw new Error('Error al obtener los registros del servidor.');
         allRecordsFromDB = await response.json();
+        
+        // ** CORRECCIÓN: La función `populateMonthFilter` ahora establecerá el filtro por defecto. **
         populateMonthFilter();
+        
+        // Aplicar los filtros para llenar la tabla.
         filterTable();
+        
     } catch (error) {
         console.error("Error fetching records:", error);
         displayMessage('Error de Conexión', 'No se pudieron cargar los registros. Asegúrese de que el servidor esté funcionando.', 'error');
         const tableBody = document.getElementById('admin-table-body');
-        // COLSPAN_VALUE AJUSTADO
-        tableBody.innerHTML = `<tr><td colspan="12" class="text-center py-10">Error al cargar datos. Verifique la consola.</td></tr>`;
+        if (tableBody) {
+             tableBody.innerHTML = `<tr><td colspan="12" class="text-center py-10">Error al cargar datos. Verifique la consola.</td></tr>`;
+        }
     }
 }
 
@@ -536,20 +534,26 @@ async function saveRecord(record) {
             body: JSON.stringify(record)
         });
         if (!response.ok) {
-            // Intenta leer el JSON del error, si no puede, usa un mensaje genérico.
             const errorData = await response.json().catch(() => ({ message: 'Error desconocido al guardar el registro. Verifique logs del servidor.' }));
-            throw new Error(errorData.message || 'Error al guardar el registro.');
+            throw new Error(errorData.error || errorData.message || 'Error al guardar el registro.');
         }
         displayMessage('REGISTRO EXITOSO', `Personal con CIP ${record.cip} ha sido guardado en la base de datos.`, 'success');
+        
+        // Limpiar el formulario y resetear el mes de registro
         document.getElementById('admin-record-form').reset();
-        // Restablecer el campo de mes de registro al mes actual después de guardar
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
-        document.getElementById('input-registro-month').value = `${year}-${month}`; // <-- RESET AL MES ACTUAL
+        document.getElementById('input-registro-month').value = `${year}-${month}`; 
         
-        setTimeout(() => document.getElementById('admin-result-box').classList.add('hidden'), 5000);
-        await fetchAndDisplayRecords();
+        setTimeout(() => {
+            const adminResultBox = document.getElementById('admin-result-box');
+            if (adminResultBox) adminResultBox.classList.add('hidden');
+        }, 5000);
+        
+        // ** CORRECCIÓN: Volver a cargar y filtrar la tabla **
+        await fetchAndDisplayRecords(); 
+        
     } catch (error) {
         console.error('Error saving record:', error);
         displayMessage('Error al Guardar', error.message, 'error');
@@ -581,35 +585,33 @@ function handleEditRecord(id) {
         return;
     }
     
-    // CARGAR NUEVOS CAMPOS
-    document.getElementById('input-gguu').value = recordToEdit.gguu || '';
-    document.getElementById('input-unidad').value = recordToEdit.unidad || '';
-    document.getElementById('input-dni').value = recordToEdit.dni || '';
-    document.getElementById('input-pa').value = recordToEdit.pa || '';
-    document.getElementById('input-pab').value = recordToEdit.pab || '';
-    document.getElementById('input-dob').value = recordToEdit.dob || ''; // <<-- AÑADIDO: Cargar DOB para edición
+    const form = document.getElementById('admin-record-form');
     
-    // --- NUEVO CAMPO: Cargar el Mes de Registro (solo el mes/año) ---
-    // El formato de la DB es DD/MM/YYYY, el campo de input es YYYY-MM
+    // CARGAR CAMPOS DE IDENTIFICACIÓN
+    form.elements['input-gguu'].value = recordToEdit.gguu || '';
+    form.elements['input-unidad'].value = recordToEdit.unidad || '';
+    form.elements['input-dni'].value = recordToEdit.dni || '';
+    form.elements['input-sex-admin'].value = recordToEdit.sexo;
+    form.elements['input-userid'].value = recordToEdit.cip;
+    form.elements['input-role'].value = recordToEdit.grado;
+    form.elements['input-lastname'].value = recordToEdit.apellido;
+    form.elements['input-firstname'].value = recordToEdit.nombre;
+    form.elements['input-dob'].value = recordToEdit.dob || ''; 
+    form.elements['input-age-admin'].value = recordToEdit.edad;
+    
+    // CARGAR CAMPOS DE PESADA
+    form.elements['input-pa'].value = recordToEdit.pa || '';
+    form.elements['input-pab'].value = recordToEdit.pab || '';
+    form.elements['input-weight-admin'].value = recordToEdit.peso;
+    form.elements['input-height-admin'].value = recordToEdit.altura;
+
+    // Cargar el Mes de Registro (DD/MM/YYYY -> YYYY-MM)
     if (recordToEdit.fecha && recordToEdit.fecha.includes('/')) {
         const parts = recordToEdit.fecha.split('/'); // [DD, MM, YYYY]
-        // Se carga el mes/año del registro que se está editando
-        document.getElementById('input-registro-month').value = `${parts[2]}-${parts[1]}`; 
+        form.elements['input-registro-month'].value = `${parts[2]}-${parts[1]}`; 
     } else {
-        document.getElementById('input-registro-month').value = ''; 
+        form.elements['input-registro-month'].value = ''; 
     }
-    // -----------------------------------------------------------------
-
-
-    // CARGAR CAMPOS EXISTENTES
-    document.getElementById('input-sex-admin').value = recordToEdit.sexo;
-    document.getElementById('input-userid').value = recordToEdit.cip;
-    document.getElementById('input-role').value = recordToEdit.grado;
-    document.getElementById('input-age-admin').value = recordToEdit.edad;
-    document.getElementById('input-lastname').value = recordToEdit.apellido;
-    document.getElementById('input-firstname').value = recordToEdit.nombre;
-    document.getElementById('input-weight-admin').value = recordToEdit.peso;
-    document.getElementById('input-height-admin').value = recordToEdit.altura;
 
     // FORZAR RECALCULO Y VISUALIZACIÓN al abrir el formulario (SOLUCIÓN UX)
     const imc = calculateIMC(recordToEdit.peso, recordToEdit.altura);
@@ -629,7 +631,7 @@ function handleEditRecord(id) {
 
     isEditMode = true;
     currentEditingRecordId = id;
-    document.getElementById('admin-record-form').scrollIntoView({ behavior: 'smooth' });
+    form.scrollIntoView({ behavior: 'smooth' });
 }
 
 function cancelEdit() {
@@ -647,7 +649,8 @@ function cancelEdit() {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     document.getElementById('input-registro-month').value = `${year}-${month}`;
     
-    document.getElementById('admin-result-box').classList.add('hidden');
+    const adminResultBox = document.getElementById('admin-result-box');
+    if (adminResultBox) adminResultBox.classList.add('hidden');
 }
 
 async function updateRecord(id, recordData) {
@@ -673,16 +676,21 @@ async function updateRecord(id, recordData) {
     }
 }
 
-
 function populateMonthFilter() {
     const filterSelect = document.getElementById('month-filter');
+    if (!filterSelect) return; 
+    
     const monthCounts = allRecordsFromDB.reduce((acc, record) => {
         if (!record.fecha) return acc;
+        // La fecha es DD/MM/YYYY, substring(3) es MM/YYYY
         const monthYear = record.fecha.substring(3); 
         acc[monthYear] = (acc[monthYear] || 0) + 1;
         return acc;
     }, {});
-    filterSelect.innerHTML = '<option value="">Todos los Meses</option>';
+    
+    // ** CORRECCIÓN: Asegurar que "Todos los Meses" sea la primera opción (value="") **
+    filterSelect.innerHTML = `<option value="">Todos los Meses (${allRecordsFromDB.length} Registros)</option>`;
+    
     Object.keys(monthCounts).sort((a, b) => {
         const [monthA, yearA] = a.split('/').map(Number);
         const [monthB, yearB] = b.split('/').map(Number);
@@ -698,22 +706,14 @@ function populateMonthFilter() {
         filterSelect.appendChild(option);
     });
     
-    // *** CORRECCIÓN CLAVE: ESTABLECER MES ACTUAL COMO FILTRO POR DEFECTO ***
-    const now = new Date();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const currentYear = now.getFullYear();
-    const currentMonthYear = `${currentMonth}/${currentYear}`; // (Ej: '10/2025')
-    
-    // Seleccionamos el mes actual si existe, sino se queda en "Todos los Meses"
-    if (filterSelect.querySelector(`option[value="${currentMonthYear}"]`)) {
-        filterSelect.value = currentMonthYear;
+    // ** CORRECCIÓN: NO FORZAR EL MES ACTUAL AQUÍ. El DOMContentLoaded se encargará del estado inicial. **
+    // Si el filtro ya tiene un valor (ej: después de un filterTable), mantenerlo. Si no, se queda en "" (Todos los Meses).
+    const currentFilterValue = filterSelect.getAttribute('data-current-value') || "";
+    if (currentFilterValue) {
+        filterSelect.value = currentFilterValue;
     } else {
-        filterSelect.selectedIndex = 0; // Por defecto "Todos los Meses" (la opción con value="")
+        filterSelect.selectedIndex = 0; // Por defecto "Todos los Meses"
     }
-    // *** FIN CORRECCIÓN CLAVE ***
-    
-    const defaultOption = filterSelect.querySelector('option[value=""]');
-    defaultOption.textContent = `Todos los Meses (${allRecordsFromDB.length} Registros)`;
 }
 
 // --- 6. Lógica de la Tabla de Registros (Filtros, Renderizado, Exportación) ---
@@ -721,10 +721,12 @@ function populateMonthFilter() {
 function filterTable() {
     const nameSearchTerm = document.getElementById('name-filter').value.toLowerCase().trim();
     const ageFilterValue = document.getElementById('age-filter').value;
-    // *** CORRECCIÓN: Capturar el valor del filtro, que ahora por defecto es el mes actual ***
-    const monthFilter = document.getElementById('month-filter').value;
-    // ...
+    const monthFilter = document.getElementById('month-filter').value; // value="" para "Todos los Meses"
     const aptitudeFilterValue = (document.getElementById('aptitude-filter').value || '').toUpperCase(); 
+
+    // Guardar el valor actual del filtro para persistencia al recargar
+    document.getElementById('month-filter').setAttribute('data-current-value', monthFilter);
+
 
     let recordsToDisplay = allRecordsFromDB;
     
@@ -741,48 +743,35 @@ function filterTable() {
         recordsToDisplay = recordsToDisplay.filter(record => record.edad === ageToMatch);
     }
     
-    // Aplicar Filtro de Mes
-    if (monthFilter) { // Solo filtra si monthFilter no es la cadena vacía ("Todos los Meses")
+    // Aplicar Filtro de Mes (SOLO si no es la cadena vacía)
+    if (monthFilter) { 
         recordsToDisplay = recordsToDisplay.filter(record => 
             record.fecha && record.fecha.substring(3) === monthFilter
         );
     }
     
-    // Aplicar NUEVO Filtro de Aptitud
-    if (aptitudeFilterValue) {
+    // Aplicar Filtro de Aptitud
+    if (aptitudeFilterValue && aptitudeFilterValue !== 'TODAS LAS APTITUDES') {
         recordsToDisplay = recordsToDisplay.filter(record => {
-            // Recalcula la aptitud para asegurar que la nueva lógica (EXCEPCIÓN PAB) se aplique.
             const { resultado } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
-            
-            // Lógica de filtrado de Aptitud
-            if (aptitudeFilterValue === 'APTO') {
-                // El resultado de getAptitude ahora solo es 'APTO' o 'INAPTO'
-                return resultado.startsWith('APTO'); 
-            } else if (aptitudeFilterValue === 'INAPTO') {
-                return resultado.startsWith('INAPTO');
-            }
-            return true;
+            return resultado.startsWith(aptitudeFilterValue);
         });
     }
     
-    // **** CORRECCIÓN CRÍTICA: AÑADIR DATOS CALCULADOS AL OBJETO ANTES DE ENVIARLO ****
     currentFilteredRecords = recordsToDisplay.map(record => {
-        // Recalcular TODOS los campos de clasificación que el backend necesita
-        const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(record.imc, record.sexo, record.pab, record.pa); // <<-- CAPTURAR motivoInapto
+        const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
         return {
             ...record,
             clasificacionMINSA: clasificacionMINSA,
             resultado: resultado,
             paClasificacion: paClasificacion,
             riesgoAEnf: riesgoAEnf,
-            motivo: motivoInapto // <<-- AÑADIDO para ser usado en la exportación a Excel
+            motivo: motivoInapto
         };
     });
-    // *********************************************************************************
 
     renderTable(currentFilteredRecords);
     
-    // Llamar a la renderización del gráfico con los datos filtrados
     renderProgressionChart(currentFilteredRecords);
 }
 
@@ -790,13 +779,11 @@ function filterTable() {
 function renderProgressionChart(records) {
     const ctx = document.getElementById('bmiProgressionChart');
     const chartCard = document.getElementById('stats-chart-card');
-    if (!ctx) return; // Si no existe el canvas, salir
+    if (!ctx || !chartCard) return;
 
-    // 1. Determinar si es un reporte individual (para gráfica de progresión)
     const cipList = records.map(r => r.cip);
     const isIndividual = records.length > 0 && cipList.every((val, i, arr) => val === arr[0]);
     
-    // Si no es un reporte individual (consolidado), ocultar la gráfica
     if (!isIndividual) {
         chartCard.style.display = 'none';
         return;
@@ -804,27 +791,22 @@ function renderProgressionChart(records) {
     
     chartCard.style.display = 'block';
 
-    // *** CORRECCIÓN DEL EJE X: Mes y Año completos ***
     const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     
-    // *** CORRECCIÓN CLAVE: ORDENACIÓN ASCENDENTE PARA LA GRÁFICA ***
-    // currentFilteredRecords está en DESC. Creamos una copia invertida para el gráfico.
     const chartRecordsAsc = [...records].reverse(); 
     
     const labels = chartRecordsAsc.map(r => {
-        const parts = r.fecha.split('/'); // DD/MM/YYYY o 01/MM/YYYY
+        const parts = r.fecha.split('/'); 
         const monthIndex = parseInt(parts[1]) - 1;
         const year = parts[2];
         const status = r.motivo === 'NO ASISTIÓ' ? ' (Ausente)' : '';
         return `${monthNames[monthIndex]} ${year}${status}`;
     });
     
-    // *** CORRECCIÓN DEL TÍTULO DE LA GRÁFICA ***
     const chartTitle = `${records[0].grado} ${records[0].apellido}, ${records[0].nombre}`;
 
     const dataPoints = chartRecordsAsc.map(r => r.motivo === 'NO ASISTIÓ' ? null : parseFloat(r.imc));
 
-    // Si ya existe una instancia de gráfico, la destruimos
     if (progressionChart) {
         progressionChart.destroy();
     }
@@ -832,20 +814,20 @@ function renderProgressionChart(records) {
     progressionChart = new Chart(ctx.getContext('2d'), {
         type: 'line',
         data: {
-            labels: labels, // Usar las etiquetas ASC
+            labels: labels,
             datasets: [{
                 label: 'Índice de Masa Corporal (IMC)',
-                data: dataPoints, // Usar los datos ASC
-                borderColor: '#CCFF00', // Verde Neón (tu color accent-lime)
+                data: dataPoints,
+                borderColor: '#CCFF00',
                 backgroundColor: 'rgba(204, 255, 0, 0.1)',
                 borderWidth: 2,
                 tension: 0.4,
-                spanGaps: true, // Conecta los meses de NO ASISTIÓ
+                spanGaps: true,
                 pointRadius: 5,
                 pointBackgroundColor: dataPoints.map(imc => {
-                    if (imc === null) return '#808080'; // Gris para NO ASISTIÓ
-                    if (imc >= 25) return '#E74C3C'; // Rojo para Sobrepeso/Obesidad (tu color alert-red)
-                    return '#008744'; // Verde para Normal (tu color primary-green)
+                    if (imc === null) return '#808080';
+                    if (imc >= 25) return '#E74C3C';
+                    return '#008744';
                 })
             }]
         },
@@ -860,8 +842,8 @@ function renderProgressionChart(records) {
                 },
                 title: {
                     display: true,
-                    text: chartTitle, // Establecer el título del gráfico
-                    color: '#FFD700', // Color del título (tu color accent-gold)
+                    text: chartTitle,
+                    color: '#FFD700',
                     font: {
                         size: 16
                     }
@@ -914,9 +896,11 @@ function renderProgressionChart(records) {
 
 function renderTable(records) {
     const tableBody = document.getElementById('admin-table-body');
+    if (!tableBody) return;
+    
     tableBody.innerHTML = '';
-    // COLSPAN_VALUE AJUSTADO
     const COLSPAN_VALUE = 12; 
+    
     if (!isAuthenticated) {
         tableBody.innerHTML = `<tr><td colspan="${COLSPAN_VALUE}" class="text-center py-4">No está autenticado.</td></tr>`;
         return;
@@ -925,17 +909,15 @@ function renderTable(records) {
         tableBody.innerHTML = `<tr><td colspan="${COLSPAN_VALUE}" class="text-center py-10">No hay registros que coincidan con los filtros.</td></tr>`;
         return;
     }
+    
     records.forEach(data => {
-        // LLAMADA ACTUALIZADA PARA OBTENER TODAS LAS CLASIFICACIONES
         const { resultado, paClasificacion, riesgoAEnf, clasificacionMINSA } = getAptitude(data.imc, data.sexo, data.pab, data.pa);
         
-        // Uso de la función simplificada para el estilo del badge
         const badgeClass = getSimplifiedAptitudeStyle(resultado); 
         const rowBgClass = resultado.startsWith('INAPTO') ? 'bg-red-900/10' : '';
         const row = tableBody.insertRow();
         row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
         
-        // Si es un registro NO ASISTIÓ, mostrar el campo MOTIVO como CLASIFICACIÓN
         const clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? data.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
         
         const riesgoAbdominalClass = riesgoAEnf === 'RIESGO MUY ALTO' ? 'text-red-500 font-bold' : (riesgoAEnf === 'RIESGO ALTO' ? 'text-color-accent-gold' : 'text-color-primary-green');
@@ -943,22 +925,17 @@ function renderTable(records) {
         
         let actionButtons = '<span>N/A</span>';
         
-        // Determinar si el usuario es Superadmin O Admin
         const isSuperadmin = currentUserRole === 'superadmin';
         const isAdmin = currentUserRole === 'admin' || isSuperadmin; 
 
         if (isAdmin) {
-            // Un registro NO ASISTIÓ no debe ser editable por ningún rol
             const isNoAsistio = data.motivo === 'NO ASISTIÓ';
-
-            // El botón de EDICIÓN (Lápiz) está disponible para el ADMIN y SUPERADMIN
             const editButton = isNoAsistio ? 
                 '<button class="text-gray-500 text-lg mr-4" title="No se puede editar NO ASISTIÓ" disabled><i class="fas fa-pencil-alt"></i></button>' :
                 `<button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Editar Registro"><i class="fas fa-pencil-alt"></i></button>`;
                 
             actionButtons = editButton; 
             
-            // El botón de ELIMINAR (Basurero) es SOLO para SUPERADMIN
             if (isSuperadmin) {
                  actionButtons += `
                     <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
@@ -978,7 +955,7 @@ function renderTable(records) {
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-gold">${data.edad || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.startsWith('INAPTO') ? 'text-red-500' : 'text-color-accent-gold'}">${data.imc || 'N/A'}</td>
             
-            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${clasificacionDisplay}</td> <!-- MUESTRA MOTIVO (NO ASISTIÓ) O CLASIFICACIÓN IMC -->
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${clasificacionDisplay}</td>
             
             <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
@@ -997,26 +974,21 @@ function exportToWord() {
         return;
     }
     
-    // --- ESTILOS OPTIMIZADOS PARA WORD (MÁS COMPACTOS) ---
-    // Ajustado a 4px de padding para máxima compacidad y fuente pequeña
     const tableHeaderStyle = "background-color: #2F4F4F; color: white; padding: 4px; text-align: center; font-size: 10px; border: 1px solid #111; font-weight: bold; border-collapse: collapse; white-space: nowrap; font-family: 'Arial', sans-serif;";
     const cellStyle = "padding: 4px; text-align: center; font-size: 10px; border: 1px solid #ccc; vertical-align: middle; border-collapse: collapse; font-family: 'Arial', sans-serif;";
-    const inaptoTextStyle = 'style="color: #991b1b; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"'; // Rojo oscuro
-    const aptoTextStyle = 'style="color: #065f46; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"'; // Verde oscuro
+    const inaptoTextStyle = 'style="color: #991b1b; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"';
+    const aptoTextStyle = 'style="color: #065f46; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"';
     const titleStyle = "text-align: center; color: #1e3a8a; font-size: 20px; margin-bottom: 5px; font-weight: bold; font-family: 'Arial', sans-serif;";
     const subtitleStyle = "text-align: center; font-size: 14px; margin-bottom: 20px; font-family: 'Arial', sans-serif;";
     const reportDate = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
     
-    // --- GENERACIÓN DE CONTENIDO HTML OPTIMIZADO ---
     let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP</title><style>body { font-family: Arial, sans-serif; } table { border-collapse: collapse; width: 100%; margin: 20px auto; } td, th { border-collapse: collapse; }</style></head><body>`;
     
-    // CABECERA
     htmlContent += `<div style="text-align: center; width: 100%;">
         <h1 style="${titleStyle}">REPORTE DE ÍNDICE DE MASA CORPORAL (SIMCEP)</h1>
         <p style="${subtitleStyle}">Fecha de Generación: ${reportDate} | Registros Filtrados: ${currentFilteredRecords.length}</p>
     </div>`;
 
-    // INICIO DE LA TABLA
     htmlContent += `<table border="1" style="width: 100%;"><thead><tr>
         <th style="${tableHeaderStyle}; width: 10%;">UNIDAD</th>
         <th style="${tableHeaderStyle}; width: 10%;">GRADO</th>
@@ -1028,16 +1000,12 @@ function exportToWord() {
         <th style="${tableHeaderStyle}; width: 23%;">CLASIFICACIÓN</th>
     </tr></thead><tbody>`;
     
-    // FILAS DE DATOS
     currentFilteredRecords.forEach(record => {
-        // Obtenemos el resultado completo para el detalle y la clasificación MINSA
         const { resultado, clasificacionMINSA } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
         
-        // Determinar el estilo de color (APTO=Verde, INAPTO=Rojo)
         const textStyleTag = resultado.startsWith('INAPTO') ? inaptoTextStyle : aptoTextStyle;
         const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
         
-        // CLASIFICACIÓN SIMPLIFICADA: SOLO MUESTRA EL TEXTO (ej: NORMAL)
         let clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
         
         htmlContent += `<tr>
@@ -1048,11 +1016,10 @@ function exportToWord() {
             <td style="${cellStyle}">${record.peso || 'N/A'}</td>
             <td style="${cellStyle}">${record.altura || 'N/A'}</td>
             <td style="${cellStyle} font-weight: bold;">${record.imc || 'N/A'}</td>
-            <td style="${cellStyle}" ${textStyleTag}>${clasificacionDisplay}</td> <!-- Muestra solo Clasificación con color de Aptitud -->
+            <td style="${cellStyle}" ${textStyleTag}>${clasificacionDisplay}</td>
         </tr>`;
     });
     
-    // CIERRE DE LA TABLA Y PIE DE PÁGINA
     htmlContent += `</tbody></table>
     <div style="margin: 40px auto 0 auto; width: 95%; text-align: center; border: none; font-family: 'Arial', sans-serif;">
         <h4 style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #1e3a8a;">LEYES DE CLASIFICACIÓN CLÍNICA (SIMCEP)</h4>
@@ -1062,14 +1029,15 @@ function exportToWord() {
         </p>
     </div></body></html>`;
 
-    // --- LÓGICA DE DESCARGA ---
     const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
     const filename = `Reporte_SIMCEP_IMC_Word_${date}.doc`;
     const blob = new Blob([htmlContent], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
+    link.download = filename;
     document.body.appendChild(link);
+    link.click(); // Usar .click() para la descarga
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
@@ -1083,50 +1051,18 @@ async function exportStatsToWord() {
         return;
     }
     
-    // Usaremos los filtros actualmente visibles en la tabla como base para el reporte
-    let records;
-    let url = '/api/stats?';
-    let params = [];
-    
-    // Prioridad: Reporte Individual (Si el filtro de nombre/cip tiene 8+ caracteres)
-    const filterCip = document.getElementById('name-filter').value.trim();
-    if (filterCip.length >= 8 && /^\d+$/.test(filterCip)) {
-         params.push(`cip=${filterCip}`);
-    } 
-    
-    // Si NO es un reporte individual estricto, aplicamos los filtros de la tabla para un consolidado
-    if (params.length === 0) {
-        // Si no hay filtros, usar los registros actuales filtrados
-        if (currentFilteredRecords.length === 0) {
-             displayMessage('Sin Datos', 'No hay registros visibles en la tabla para generar estadística. Ajuste los filtros.', 'warning');
-             return;
-        }
-        
-        records = currentFilteredRecords;
-
-    } else {
-        // Llama al servidor con el filtro CIP
-        try {
-            const response = await fetch(url + params.join('&'));
-             if (!response.ok) {
-                 const errorData = await response.json();
-                 throw new Error(errorData.message || 'No se encontraron registros para este CIP en la base de datos.');
-             }
-             records = await response.json();
-        } catch (error) {
-             console.error("Error en la exportación de estadísticas:", error);
-             displayMessage('Error de Exportación', `No se pudo generar el reporte estadístico: ${error.message}`, 'error');
-             return;
-        }
-    }
+    // Obtener registros de la tabla (ya filtrados por el usuario)
+    const records = currentFilteredRecords;
     
     if (records.length === 0) {
-        displayMessage('Sin Datos', 'No hay registros para generar estadísticas.', 'warning');
+        displayMessage('Sin Datos', 'No hay registros visibles en la tabla para generar estadística. Ajuste los filtros.', 'warning');
         return;
     }
 
-    // 1. OBTENER INFORMACIÓN BASE (del primer registro, si es individual)
-    const isIndividual = records.every(r => r.cip === records[0].cip) && records.length > 0;
+    // 1. OBTENER INFORMACIÓN BASE
+    const cipList = records.map(r => r.cip);
+    const isIndividual = records.every((val, i, arr) => val === arr[0]);
+    
     const reportTitle = isIndividual 
         ? `REPORTE DE PROGRESIÓN DE IMC DEL PERSONAL: ${records[0].apellido}, ${records[0].nombre}`
         : "REPORTE ESTADÍSTICO CONSOLIDADO DE PESADA";
@@ -1136,8 +1072,6 @@ async function exportStatsToWord() {
     // 2. GENERACIÓN DE LA TABLA DE PROGRESIÓN INDIVIDUAL
     let progressionTableHtml = '';
     
-    // A diferencia de la versión anterior, AHORA SOLO MOSTRAMOS EL RESUMEN.
-    // La gráfica de progresión se ve en pantalla con renderProgressionChart(records);
     if (isIndividual) {
          progressionTableHtml = `
             <h3 style="font-size: 16px; margin-top: 20px; font-weight: bold; color: #008744;">NOTA: VER GRÁFICO DE PROGRESIÓN EN PANTALLA</h3>
@@ -1178,7 +1112,7 @@ async function exportStatsToWord() {
     `;
 
     // 4. GENERACIÓN DEL DOCUMENTO WORD FINAL
-    const reportDate = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const reportDate = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
     let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP Estadístico</title><style>body { font-family: Arial, sans-serif; }</style></head><body>`;
     
     htmlContent += `<div style="text-align: center; font-family: 'Arial', sans-serif;">
@@ -1199,6 +1133,7 @@ async function exportStatsToWord() {
     link.href = downloadUrl;
     link.download = filename; 
     document.body.appendChild(link);
+    link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(downloadUrl);
     displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
@@ -1212,21 +1147,18 @@ function downloadChartAsImage() {
         return;
     }
     
-    // Configuración de descarga
     const reportDate = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-    // Intentar obtener el CIP del primer registro si está filtrado individualmente
     const cip = currentFilteredRecords.length > 0 && currentFilteredRecords.every(r => r.cip === currentFilteredRecords[0].cip) ? currentFilteredRecords[0].cip : 'CONSOLIDADO';
 
     const filename = `Progreso_IMC_${cip}_${reportDate}.png`;
     
-    // Obtener la URL de la imagen del canvas
     const imageURL = canvas.toDataURL('image/png'); 
     
-    // Crear un enlace temporal para forzar la descarga
     const a = document.createElement('a');
     a.href = imageURL;
     a.download = filename;
     document.body.appendChild(a);
+    a.click();
     document.body.removeChild(a);
     
     displayMessage('ÉXITO', `Gráfica descargada como ${filename}.`, 'success');
@@ -1240,10 +1172,9 @@ function exportToExcel() {
         return;
     }
     
-    // CAPTURAR EL MES DEL REPORTE DEL NUEVO INPUT
-    const reportMonth = document.getElementById('input-report-month').value.toUpperCase();
+    const reportMonthEl = document.getElementById('input-report-month');
+    const reportMonth = reportMonthEl ? reportMonthEl.value.toUpperCase() : 'REPORTE CONSOLIDADO';
     
-    // Cambiar el texto del botón
     const btn = document.getElementById('export-excel-button');
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> GENERANDO...';
@@ -1254,7 +1185,6 @@ function exportToExcel() {
         headers: {
             'Content-Type': 'application/json',
         },
-        // Enviamos los datos filtrados Y el mes del reporte al servidor
         body: JSON.stringify({
             records: currentFilteredRecords,
             reportMonth: reportMonth 
@@ -1262,19 +1192,16 @@ function exportToExcel() {
     })
     .then(response => {
         if (!response.ok) {
-            // Manejar errores del servidor (404, 500)
             return response.json().then(error => { throw new Error(error.message || 'Error desconocido del servidor.'); });
         }
-        // El servidor devuelve el archivo como un blob binario
         return response.blob(); 
     })
     .then(blob => {
-        // Crear la URL del objeto y simular la descarga
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
         a.href = url;
-        a.download = `Reporte_SIMCEP_Mensual_${date}.xlsx`; // <-- Extension XLSX
+        a.download = `Reporte_SIMCEP_Mensual_${date}.xlsx`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -1287,7 +1214,6 @@ function exportToExcel() {
         displayMessage('Error de Exportación', `No se pudo generar el archivo: ${error.message}`, 'error');
     })
     .finally(() => {
-        // Restaurar el botón
         btn.innerHTML = originalHtml;
         btn.disabled = false;
     });
@@ -1296,20 +1222,18 @@ function exportToExcel() {
 
 // --- 7. Event Listeners ---
 
-document.getElementById('bmi-form').addEventListener('submit', function(e) {
+document.getElementById('bmi-form')?.addEventListener('submit', function(e) {
     e.preventDefault();
     const weight = parseFloat(document.getElementById('input-weight').value);
     const height = parseFloat(document.getElementById('input-height').value);
-    const pab = parseFloat(document.getElementById('input-pab-public').value); // <-- NUEVO
+    const pab = parseFloat(document.getElementById('input-pab-public').value);
     const sex = document.getElementById('input-sex').value;
     
-    // NOTA: Para el formulario público, no pedimos PA, usaremos N/A o un valor neutral.
     const pa = 'N/A'; 
     
-    if (weight > 0 && height > 0 && pab > 0) { // <-- VALIDACIÓN PAB
+    if (weight > 0 && height > 0 && pab > 0) {
         const imc = calculateIMC(weight, height);
         
-        // LLAMADA A LA LÓGICA CLÍNICA COMPLETA
         const { resultado, detalle } = getAptitude(imc, sex, pab, pa); 
 
         const badgeClass = resultado.startsWith('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
@@ -1324,7 +1248,7 @@ document.getElementById('bmi-form').addEventListener('submit', function(e) {
     }
 });
 
-document.getElementById('admin-record-form').addEventListener('submit', async function(e) {
+document.getElementById('admin-record-form')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     if (!isAuthenticated) {
         displayMessage('Acceso Denegado', 'Debe iniciar sesión para operar.', 'error');
@@ -1332,55 +1256,43 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
     }
     const form = e.target;
     
-    // CAPTURA DE DATOS DE LOS 11 INPUTS
-    const gguu = form.elements['input-gguu'].value;
-    const unidad = form.elements['input-unidad'].value;
-    const dni = form.elements['input-dni'].value;
-    const pa = form.elements['input-pa'].value;
-    const sexo = form.elements['input-sex-admin'].value;
-    const cip = form.elements['input-userid'].value;
-    const grado = form.elements['input-role'].value;
-    const apellido = form.elements['input-lastname'].value;
-    const nombre = form.elements['input-firstname'].value;
-    const dob = form.elements['input-dob'].value; // Capturar DOB
-    const edad = calculateAge(dob); // Calcular edad desde DOB
-    const peso = parseFloat(form.elements['input-weight-admin'].value);
-    const altura = parseFloat(form.elements['input-height-admin'].value);
-    const pab = parseFloat(form.elements['input-pab'].value); 
+    // CAPTURA DE DATOS
+    const gguu = form.elements['input-gguu']?.value || '';
+    const unidad = form.elements['input-unidad']?.value || '';
+    const dni = form.elements['input-dni']?.value || '';
+    const pa = form.elements['input-pa']?.value || '';
+    const sexo = form.elements['input-sex-admin']?.value || '';
+    const cip = form.elements['input-userid']?.value || '';
+    const grado = form.elements['input-role']?.value || '';
+    const apellido = form.elements['input-lastname']?.value || '';
+    const nombre = form.elements['input-firstname']?.value || '';
+    const dob = form.elements['input-dob']?.value || '';
+    const edad = calculateAge(dob); 
+    const peso = parseFloat(form.elements['input-weight-admin']?.value || 0);
+    const altura = parseFloat(form.elements['input-height-admin']?.value || 0);
+    const pab = parseFloat(form.elements['input-pab']?.value || 0); 
 
-    // *** SOLUCIÓN FLEXIBILIDAD: CAPTURA DE MES DE REGISTRO (YYYY-MM) ***
-    // [ÚLTIMA CORRECCIÓN: Asegurar que el valor no sea undefined o null antes de acceder a la propiedad]
     const registroMonthInput = form.elements['input-registro-month'];
     const registroMonthYear = registroMonthInput ? registroMonthInput.value : ''; 
     
-    // ** CORRECCIÓN DE LA VALIDACIÓN DEL FORMATO YYYY-MM (Más estricta) **
     if (!registroMonthYear || registroMonthYear.length !== 7 || registroMonthYear.indexOf('-') !== 4) {
         displayMessage('Error de Entrada', 'El Mes de Registro es obligatorio y debe tener el formato YYYY-MM (Ej: 2025-11).', 'error');
-        document.getElementById('admin-result-box').classList.add('hidden');
+        document.getElementById('admin-result-box')?.classList.add('hidden');
         return;
     }
     
     const [regYear, regMonth] = registroMonthYear.split('-');
-    
-    // Formato que la DB usa para la FECHA: DD/MM/YYYY (Usamos 01 para el día)
     const formattedDate = `01/${regMonth}/${regYear}`; 
-    // Formato que la DB usa para la UNICIDAD: MM/YYYY
     const formattedMonthYear = `${regMonth}/${regYear}`; 
-    // ********************************************************************
-
 
     // VALIDACIÓN DE CAMPOS CLAVE
     if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 0 && gguu && unidad && dni && pa) {
         
-        // *** INICIO DE LA REGLA DE UNICIDAD MENSUAL (CORRECCIÓN CRÍTICA APLICADA) ***
         if (!isEditMode) {
-            try { // <<-- Bloque try para manejar errores de fetch/promesa
-                
-                // CAMBIO CLAVE: Enviamos el mes objetivo como query param
+            try { 
                 const checkResponse = await fetch(`/api/records/check-monthly/${cip}?targetMonthYear=${formattedMonthYear}`);
                 
-                if (!checkResponse.ok) { // <<-- Manejo de errores HTTP
-                    // Intenta leer el cuerpo del error, si falla, usa un mensaje genérico.
+                if (!checkResponse.ok) { 
                     const errorData = await checkResponse.json().catch(() => ({ message: 'Error desconocido del servidor.' }));
                     throw new Error(errorData.message || `Error en la verificación de duplicados (${checkResponse.status}).`);
                 }
@@ -1389,29 +1301,24 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
 
                 if (checkData.alreadyRecorded) {
                     displayMessage('REGISTRO DUPLICADO', checkData.message, 'warning');
-                    document.getElementById('admin-result-box').classList.add('hidden');
-                    return; // <<-- BLOQUEAR EL GUARDADO
+                    document.getElementById('admin-result-box')?.classList.add('hidden');
+                    return; 
                 }
                 
-                // Si se crearon registros faltantes, mostrar alerta
                 if (checkData.missingRecordsCreated) {
                     displayMessage('REGISTROS CREADOS', `Se crearon ${checkData.count} registros de 'NO ASISTIÓ' para los meses faltantes.`, 'success');
-                    // Esperar a que la tabla se actualice con los registros 'NO ASISTIÓ' antes de guardar el registro actual
                     await fetchAndDisplayRecords(); 
                 }
                 
             } catch (error) {
-                // Captura el ReferenceError, error de red, o el error que lanzamos arriba
                 displayMessage('ERROR DE VERIFICACIÓN', error.message, 'error');
                 console.error("Error en la verificación de unicidad:", error);
-                document.getElementById('admin-result-box').classList.add('hidden');
-                return; // <<-- BLOQUEAR EL GUARDADO SI EL FETCH FALLA
+                document.getElementById('admin-result-box')?.classList.add('hidden');
+                return;
             }
         }
-        // *** FIN DE LA REGLA DE UNICIDAD MENSUAL ***
         
         const imc = calculateIMC(peso, altura);
-        // LLAMADA A LA LÓGICA CLÍNICA COMPLETA
         const { resultado, detalle, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(imc, sexo, pab, pa); 
         
         const badgeClass = getSimplifiedAptitudeStyle(resultado);
@@ -1421,64 +1328,51 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
         document.getElementById('admin-aptitude-detail').textContent = detalle;
         document.getElementById('admin-result-box').classList.remove('hidden');
         
-        // Preparar el campo Digitador: [CIP/Nombre] ([Cargo] [Primer Apellido])
-        const primerApellido = currentAdminFullName.split(' ')[0] || ''; 
-        const adminRoleText = currentAdminFullName.includes('MD') || currentAdminFullName.includes('DR') ? 'DR/MD' : (currentUserRole === 'superadmin' ? 'SUPERADMIN' : 'ADMIN');
-        const digitadorFinal = `${currentAdminUser} (${adminRoleText} ${primerApellido})`; // <-- CORREGIDO
+        const primerApellido = currentAdminFullName?.split(' ')[0] || ''; 
+        const adminRoleText = currentAdminFullName?.includes('MD') || currentAdminFullName?.includes('DR') ? 'DR/MD' : (currentUserRole === 'superadmin' ? 'SUPERADMIN' : 'ADMIN');
+        const digitadorFinal = `${currentAdminUser} (${adminRoleText} ${primerApellido})`;
 
         if (isEditMode) {
-            // AÑADIR TODOS LOS CAMPOS (Motivo, DOB y FECHA seleccionada)
             const updatedRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo: motivoInapto, dob: dob, fecha: formattedDate }; 
-            
-            // LOG DE DEBUG
-            console.log("Datos a enviar para ACTUALIZAR:", updatedRecord); 
-            
             updateRecord(currentEditingRecordId, updatedRecord);
         } else {
-            // AÑADIR TODOS LOS CAMPOS (Motivo, DOB y FECHA seleccionada)
-            const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: digitadorFinal, motivo: motivoInapto, dob: dob }; // <<-- USAMOS formattedDate
-            
-            // LOG DE DEBUG
-            console.log("Datos a enviar para GUARDAR:", newRecord); 
-            
+            const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: digitadorFinal, motivo: motivoInapto, dob: dob }; 
             saveRecord(newRecord);
         }
     } else {
         displayMessage('Error de Entrada', 'Por favor, complete todos los campos obligatorios y revise valores numéricos (Peso, Altura, PAB).', 'error');
-        document.getElementById('admin-result-box').classList.add('hidden');
+        document.getElementById('admin-result-box')?.classList.add('hidden');
     }
 });
 
-document.getElementById('admin-login-button').addEventListener('click', attemptAdminLogin);
-document.getElementById('logout-button').addEventListener('click', logoutAdmin);
-document.getElementById('export-word-button').addEventListener('click', exportToWord);
-// CONEXIÓN DEL BOTÓN EXCEL
-document.getElementById('export-excel-button').addEventListener('click', exportToExcel); 
-document.getElementById('export-stats-button').addEventListener('click', exportStatsToWord); // <<-- CONEXIÓN DEL BOTÓN ESTADÍSTICA
-document.getElementById('download-chart-button').addEventListener('click', downloadChartAsImage); // <<-- CONEXIÓN DEL BOTÓN DESCARGAR GRÁFICA
+document.getElementById('admin-login-button')?.addEventListener('click', attemptAdminLogin);
+document.getElementById('logout-button')?.addEventListener('click', logoutAdmin);
+document.getElementById('export-word-button')?.addEventListener('click', exportToWord);
+document.getElementById('export-excel-button')?.addEventListener('click', exportToExcel); 
+document.getElementById('export-stats-button')?.addEventListener('click', exportStatsToWord);
+document.getElementById('download-chart-button')?.addEventListener('click', downloadChartAsImage);
 
-document.getElementById('forgot-password-link').addEventListener('click', function(e) {
+document.getElementById('forgot-password-link')?.addEventListener('click', function(e) {
     e.preventDefault(); 
     handleForgotPassword();
 });
-document.getElementById('name-filter').addEventListener('input', filterTable);
-document.getElementById('age-filter').addEventListener('input', filterTable);
-document.getElementById('month-filter').addEventListener('change', filterTable);
-document.getElementById('aptitude-filter').addEventListener('change', filterTable); // <-- CONEXIÓN DEL NUEVO FILTRO
-document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
+document.getElementById('name-filter')?.addEventListener('input', filterTable);
+document.getElementById('age-filter')?.addEventListener('input', filterTable);
+document.getElementById('month-filter')?.addEventListener('change', filterTable);
+document.getElementById('aptitude-filter')?.addEventListener('change', filterTable); 
+document.getElementById('add-user-form')?.addEventListener('submit', handleAddUser);
+
 
 // LÓGICA DE AUTOCOMPLETADO
 async function fetchAndAutoFill(queryType, queryValue) {
     if (!queryValue || queryValue.length < 5) return;
     
-    // Usamos la ruta existente /api/patient/:dni o /api/patient/:cip
     const url = `/api/patient/${queryValue}`; 
 
     try {
         const response = await fetch(url);
         
         if (response.status === 404) {
-            // No encontrado: Mantenemos todos los datos ingresados y solo mostramos el mensaje.
             if (queryValue.length > 7) {
                 displayMessage('ATENCIÓN', `Paciente con ${queryType} ${queryValue} no encontrado. Ingrese datos manualmente.`, 'warning');
             }
@@ -1489,30 +1383,25 @@ async function fetchAndAutoFill(queryType, queryValue) {
         
         const patientData = await response.json();
         
-        // --- 1. AUTOCOMPLETADO DE CAMPOS DE IDENTIFICACIÓN Y ASIGNACIÓN (Estables) ---
-        // Se autocompletan: CIP, Nombre, Apellido, Sexo, DOB, GGUU, UNIDAD, GRADO
-        document.getElementById('input-gguu').value = patientData.gguu || '';     // <<-- Autocompletar GGUU
-        document.getElementById('input-unidad').value = patientData.unidad || ''; // <<-- Autocompletar UNIDAD
-        document.getElementById('input-userid').value = patientData.cip || '';   // Autocompletar CIP
-        document.getElementById('input-role').value = patientData.grado || '';   // <<-- Autocompletar GRADO
+        // Autocompletar con null-check
+        document.getElementById('input-gguu').value = patientData.gguu || ''; 
+        document.getElementById('input-unidad').value = patientData.unidad || ''; 
+        document.getElementById('input-userid').value = patientData.cip || '';
+        document.getElementById('input-role').value = patientData.grado || '';
         document.getElementById('input-sex-admin').value = patientData.sexo || 'Masculino';
         document.getElementById('input-lastname').value = patientData.apellido || '';
-        // CORRECCIÓN: Si el nombre del paciente es null/undefined, no hacer split
-        const patientFirstName = patientData.nombre || '';
-        document.getElementById('input-firstname').value = patientFirstName;
+        document.getElementById('input-firstname').value = patientData.nombre || '';
         
-        // Rellenar edad y DOB
         document.getElementById('input-age-admin').value = patientData.edad || '';
         if (patientData.fechaNacimiento) {
-            document.getElementById('input-dob').value = patientData.fechaNacimiento; // <<-- Autocompletar DOB
+            document.getElementById('input-dob').value = patientData.fechaNacimiento; 
             const edadCalculada = calculateAge(patientData.fechaNacimiento);
             document.getElementById('input-age-admin').value = edadCalculada;
         } else {
              document.getElementById('input-dob').value = '';
         }
 
-        // --- 2. VACÍO DE CAMPOS VARIABLES (PESADA CLÍNICA) ---
-        // PA, PESO, ALTURA, PAB se dejan vacíos para el nuevo registro de pesada.
+        // VACÍO DE CAMPOS VARIABLES (PESADA CLÍNICA)
         document.getElementById('input-pa').value = ''; 
         document.getElementById('input-weight-admin').value = ''; 
         document.getElementById('input-height-admin').value = ''; 
@@ -1527,32 +1416,16 @@ async function fetchAndAutoFill(queryType, queryValue) {
 
 function handleDNIInput(event) {
     const dni = event.target.value;
-    // Solo busca si es un DNI de 8 dígitos
     if (dni.length === 8 && /^\d+$/.test(dni)) {
         fetchAndAutoFill('DNI', dni);
     } 
-    // Si la entrada es borrada o incompleta, no hacer nada para mantener el registro manual
 }
 
-// Lógica de Eventos para DNI/CIP
-document.getElementById('input-dni').addEventListener('blur', handleDNIInput);
+document.getElementById('input-dni')?.addEventListener('blur', handleDNIInput);
 
-// ELIMINAMOS la escucha del CIP
-// document.getElementById('input-userid').removeEventListener('blur', handleCIPInput);
 
 document.addEventListener('DOMContentLoaded', () => {
     const now = new Date();
-    
-    // Configuración inicial del filtro de tabla (Mes actual)
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const currentYear = now.getFullYear();
-    const currentMonthYear = `${currentMonth}/${currentYear}`; 
-
-    const filterSelect = document.getElementById('month-filter');
-    if (filterSelect) {
-        // Aseguramos que el filtro se establezca al mes actual
-        filterSelect.value = currentMonthYear;
-    }
     
     // Configuración inicial del input del Mes de Registro (YYYY-MM)
     const year = now.getFullYear();
@@ -1561,6 +1434,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (registroMonthInput) {
         registroMonthInput.value = `${year}-${month}`;
     }
+
+    // ** SOLUCIÓN CRÍTICA PARA VISIBILIDAD DE REGISTROS VIEJOS **
+    // Forzar el filtro de la tabla a "Todos los Meses" al cargar
+    const filterSelect = document.getElementById('month-filter');
+    if (filterSelect) {
+        filterSelect.value = ""; // Valor de "Todos los Meses"
+        filterSelect.setAttribute('data-current-value', ""); // Resetear el estado guardado
+    }
+    // ** FIN SOLUCIÓN CRÍTICA **
 
     updateUI();
 });
