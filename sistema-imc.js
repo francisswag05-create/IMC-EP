@@ -1349,11 +1349,13 @@ document.getElementById('admin-record-form').addEventListener('submit', async fu
     const pab = parseFloat(form.elements['input-pab'].value); 
 
     // *** SOLUCIÓN FLEXIBILIDAD: CAPTURA DE MES DE REGISTRO (YYYY-MM) ***
-    const registroMonthYear = form.elements['input-registro-month'].value; 
+    // [ÚLTIMA CORRECCIÓN: Asegurar que el valor no sea undefined o null antes de acceder a la propiedad]
+    const registroMonthInput = form.elements['input-registro-month'];
+    const registroMonthYear = registroMonthInput ? registroMonthInput.value : ''; 
     
-    // ** CORRECCIÓN DE LA VALIDACIÓN DEL FORMATO YYYY-MM **
-    if (!registroMonthYear || registroMonthYear.length !== 7 || !registroMonthYear.includes('-')) {
-        displayMessage('Error de Entrada', 'El Mes de Registro debe tener el formato YYYY-MM (Ej: 2025-11).', 'error');
+    // ** CORRECCIÓN DE LA VALIDACIÓN DEL FORMATO YYYY-MM (Más estricta) **
+    if (!registroMonthYear || registroMonthYear.length !== 7 || registroMonthYear.indexOf('-') !== 4) {
+        displayMessage('Error de Entrada', 'El Mes de Registro es obligatorio y debe tener el formato YYYY-MM (Ej: 2025-11).', 'error');
         document.getElementById('admin-result-box').classList.add('hidden');
         return;
     }
