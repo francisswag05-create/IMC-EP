@@ -284,13 +284,19 @@ app.post('/api/records', (req, res) => {
     const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob } = req.body;
     
     // SQL con todos los 20 campos para inserción
+    // La lista de columnas coincide con la definición de la tabla (20 columnas sin id)
     const sql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING id`;
     
+    // El array de valores tiene que coincidir exactamente en orden
     const values = [gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob];
     
     pool.query(sql, values)
         .then(result => res.status(201).json({ message: "Registro guardado exitosamente", id: result.rows[0].id }))
-        .catch(err => res.status(500).json({ error: err.message }));
+        .catch(err => {
+             // LOG DE DEBUG CRÍTICO: Muestra el error exacto de Postgres
+             console.error("ERROR DE POSTGRES EN /api/records:", err.message, "Detalles:", err);
+             res.status(500).json({ error: err.message });
+        });
 });
 
 // [PUT] /api/records/:id (Postgres)
@@ -465,7 +471,11 @@ app.post('/api/login', (req, res) => {
             if (!user) return res.status(401).json({ message: "Credenciales incorrectas." });
             
             bcrypt.compare(password, user.password, (bcryptErr, result) => {
-                if (bcryptErr) return res.status(500).json({ message: "Error del servidor." });
+                // LOG DE DEBUG: Si bcrypt falla, registrar la razón
+                if (bcryptErr) {
+                    console.error("Error en bcrypt.compare (Login):", bcryptErr);
+                    return res.status(500).json({ message: "Error del servidor." });
+                }
                 if (result) {
                     res.json({ message: "Login exitoso", user: { cip: user.cip, fullName: user.fullName, role: user.role } });
                 } else {
@@ -562,11 +572,13 @@ app.post('/api/forgot-password', (req, res) => {
             
             pool.query(updateSql, [token, expires, cip])
                 .then(async () => {
-                    const emailUser = 'francis.swag.05@gmail.com';
-                    const emailPass = 'itgoxxnazoxgutxm';
+                    // *** CAMBIO DE SEGURIDAD: USAR VARIABLES DE ENTORNO ***
+                    const emailUser = process.env.EMAIL_USER;
+                    const emailPass = process.env.EMAIL_PASS;
+                    // *** FIN CAMBIO DE SEGURIDAD ***
 
                     if (!emailUser || !emailPass) {
-                        console.error("ERROR: Credenciales de Nodemailer no configuradas.");
+                        console.error("ERROR: Credenciales de Nodemailer no configuradas. Por favor, configure EMAIL_USER y EMAIL_PASS en Railway.");
                         return res.status(500).json({ message: "Servicio de correo no configurado." });
                     }
                     const transporter = nodemailer.createTransport({
