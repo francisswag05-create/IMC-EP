@@ -1,4 +1,4 @@
-// server.js (Versión revisada para garantizar la funcionalidad de DB)
+// server.js (Versión Final y Verificada para PostgreSQL en Railway)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -22,14 +22,13 @@ app.use(express.static(path.join(__dirname, '/')));
 // --- 3. CONEXIÓN A LA BASE DE DATOS POSTGRESQL (Railway) ---
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL, 
-    // Usar solo rejectUnauthorized: false si es estrictamente necesario, pero para Railway suele serlo.
+    // Usar ssl: { rejectUnauthorized: false } para conexiones seguras desde Node a Railway
     ssl: { rejectUnauthorized: false } 
 });
 
 // Función auxiliar para las consultas
 function dbQueryPromise(sql, params = []) {
     if (!process.env.DATABASE_URL) {
-        // En un entorno de producción como Railway, esto no debería ocurrir
         console.error("La variable DATABASE_URL de Railway no está configurada.");
         return Promise.reject(new Error("La variable DATABASE_URL no está configurada."));
     }
@@ -58,12 +57,12 @@ async function initializeDatabase() {
                 role VARCHAR(50) NOT NULL,
                 email VARCHAR(255) UNIQUE,
                 resetPasswordToken VARCHAR(255),
-                -- Usar TIMESTAMP sin zona horaria para manejo de fechas de expiración
+                -- Usar BIGINT para almacenar la marca de tiempo de expiración
                 resetPasswordExpires BIGINT 
             );
         `);
         
-        // COMANDO 2: Crear la tabla RECORDS
+        // COMANDO 2: Crear la tabla RECORDS (Completa con todos los campos)
         await client.query(`
             CREATE TABLE IF NOT EXISTS records (
                 id SERIAL PRIMARY KEY, 
@@ -201,7 +200,6 @@ app.get('/api/stats', (req, res) => {
 // [GET] /api/records/check-monthly/:cip (Postgres) - Lógica de relleno de registros
 app.get('/api/records/check-monthly/:cip', (req, res) => {
     // ... (Tu código de relleno de registros es correcto y queda igual) ...
-    // No hay necesidad de modificar esta ruta ya que su lógica es robusta.
     const { cip } = req.params;
     const { targetMonthYear } = req.query; 
 
@@ -234,8 +232,7 @@ app.get('/api/records/check-monthly/:cip', (req, res) => {
                 let lastYear = parseInt(lastDateParts[2]);
 
                 // Empezar a chequear desde el mes siguiente al último registro
-                let checkDate = new Date(lastYear, lastMonth, 1); // lastMonth es 1-12, Date usa 0-11.
-                                                                 // Si lastMonth es 10, crea un Date con mes 10 (noviembre). OK.
+                let checkDate = new Date(lastYear, lastMonth, 1); 
 
                 while (checkDate.getTime() < targetDate.getTime()) {
                     const missingMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
@@ -289,9 +286,8 @@ app.get('/api/records/check-monthly/:cip', (req, res) => {
 
 // [GET] /api/patient/:dni (Postgres)
 app.get('/api/patient/:dni', (req, res) => {
-    // ... (Tu código de búsqueda de paciente más reciente es correcto y queda igual) ...
-    const { dni } = req.params;
     // Busca el registro más reciente del paciente por DNI o CIP
+    const { dni } = req.params;
     const sql = "SELECT * FROM records WHERE dni = $1 OR cip = $2 ORDER BY id DESC LIMIT 1";
     pool.query(sql, [dni, dni])
         .then(result => {
@@ -345,7 +341,6 @@ app.post('/api/records', (req, res) => {
 
 // [PUT] /api/records/:id (Postgres)
 app.put('/api/records/:id', (req, res) => {
-    // ... (Tu código de actualización es correcto y queda igual) ...
     const { id } = req.params;
     const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob, fecha } = req.body;
     
@@ -368,7 +363,6 @@ app.put('/api/records/:id', (req, res) => {
 
 // [DELETE] /api/records/:id (Postgres)
 app.delete('/api/records/:id', (req, res) => {
-    // ... (Tu código de eliminación es correcto y queda igual) ...
     const { id } = req.params;
     const sql = "DELETE FROM records WHERE id = $1";
     pool.query(sql, [id])
@@ -382,7 +376,6 @@ app.delete('/api/records/:id', (req, res) => {
 
 // [POST] /api/export-excel (Postgres)
 app.post('/api/export-excel', async (req, res) => {
-    // ... (Tu código de exportación a Excel es correcto y queda igual) ...
     try {
         const { records, reportMonth } = req.body; 
         
@@ -511,7 +504,6 @@ app.post('/api/export-excel', async (req, res) => {
 
 // [POST] /api/login (Postgres)
 app.post('/api/login', (req, res) => {
-    // ... (Tu código de login es correcto y queda igual) ...
     const { cip, password } = req.body;
     if (!cip || !password) return res.status(400).json({ message: "CIP y contraseña requeridos." });
     
@@ -538,7 +530,6 @@ app.post('/api/login', (req, res) => {
 
 // [PUT] /api/users/password/:cip (Postgres)
 app.put('/api/users/password/:cip', (req, res) => {
-    // ... (Tu código de actualización de contraseña es correcto y queda igual) ...
     const { cip } = req.params;
     const { newPassword } = req.body;
     if (!newPassword) return res.status(400).json({ message: "Nueva contraseña requerida." });
@@ -559,7 +550,6 @@ app.put('/api/users/password/:cip', (req, res) => {
 
 // [GET] /api/users (Postgres)
 app.get('/api/users', (req, res) => {
-    // ... (Tu código de obtener usuarios es correcto y queda igual) ...
     const sql = "SELECT cip, fullName, role FROM users";
     pool.query(sql)
         .then(result => res.json(result.rows))
@@ -568,7 +558,6 @@ app.get('/api/users', (req, res) => {
 
 // [POST] /api/users (Postgres)
 app.post('/api/users', (req, res) => {
-    // ... (Tu código de crear usuario es correcto y queda igual) ...
     const { cip, fullName, password, email } = req.body;
     if (!cip || !fullName || !password) return res.status(400).json({ message: "CIP, Nombre y Contraseña requeridos." });
     
@@ -594,7 +583,6 @@ app.post('/api/users', (req, res) => {
 
 // [DELETE] /api/users/:cip (Postgres)
 app.delete('/api/users/:cip', (req, res) => {
-    // ... (Tu código de eliminar usuario es correcto y queda igual) ...
     const { cip } = req.params;
     const sql = "DELETE FROM users WHERE cip = $1";
     pool.query(sql, [cip])
@@ -611,7 +599,6 @@ app.delete('/api/users/:cip', (req, res) => {
 
 // [POST] /api/forgot-password (Postgres)
 app.post('/api/forgot-password', (req, res) => {
-    // ... (Tu código de forgot-password es correcto y queda igual) ...
     const { cip } = req.body;
     const selectSql = `SELECT * FROM users WHERE cip = $1`;
     
@@ -663,7 +650,6 @@ app.post('/api/forgot-password', (req, res) => {
 
 // [POST] /api/reset-password (Postgres)
 app.post('/api/reset-password', (req, res) => {
-    // ... (Tu código de reset-password es correcto y queda igual) ...
     const { token, password } = req.body;
     // La comparación del token y la expiración se hace aquí
     const selectSql = `SELECT * FROM users WHERE resetPasswordToken = $1 AND resetPasswordExpires > $2`;
