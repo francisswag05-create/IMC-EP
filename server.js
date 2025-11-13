@@ -1,6 +1,8 @@
+// server.js (Versión revisada para garantizar la funcionalidad de DB)
+
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
-const { Pool } = require('pg'); // <<< AÑADIDO: Paquete de PostgreSQL
+const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const path = require('path');
 const cors = require('cors'); 
@@ -14,35 +16,40 @@ const PORT = process.env.PORT || 3000;
 // --- 2. MIDDLEWARE ---
 app.use(cors()); 
 app.use(express.json()); 
+// Servir la carpeta raíz como estática
 app.use(express.static(path.join(__dirname, '/'))); 
 
 // --- 3. CONEXIÓN A LA BASE DE DATOS POSTGRESQL (Railway) ---
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL, 
+    // Usar solo rejectUnauthorized: false si es estrictamente necesario, pero para Railway suele serlo.
     ssl: { rejectUnauthorized: false } 
 });
 
 // Función auxiliar para las consultas
 function dbQueryPromise(sql, params = []) {
     if (!process.env.DATABASE_URL) {
-        return Promise.reject(new Error("La variable DATABASE_URL de Railway no está configurada."));
+        // En un entorno de producción como Railway, esto no debería ocurrir
+        console.error("La variable DATABASE_URL de Railway no está configurada.");
+        return Promise.reject(new Error("La variable DATABASE_URL no está configurada."));
     }
     return pool.query(sql, params)
         .then(res => res.rows)
         .catch(err => {
-            console.error("Error en consulta DB:", err);
+            console.error("Error en consulta DB:", err.message);
+            // Re-lanzar el error para que sea capturado por la ruta
             throw err;
         });
 }
 
 // Función para inicializar la base de datos (Postgres)
 async function initializeDatabase() {
-    console.log("Conexión a la base de datos PostgreSQL de Railway establecida con éxito.");
+    console.log("Intentando conectar a la base de datos PostgreSQL de Railway...");
     const client = await pool.connect();
     try {
         // Ejecución de la creación de tablas (Postgres usa SERIAL PRIMARY KEY y tipos específicos)
         
-        // COMANDO 1: Crear la tabla USERS (Separado para evitar errores de sintaxis)
+        // COMANDO 1: Crear la tabla USERS
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 cip VARCHAR(50) PRIMARY KEY,
@@ -51,11 +58,12 @@ async function initializeDatabase() {
                 role VARCHAR(50) NOT NULL,
                 email VARCHAR(255) UNIQUE,
                 resetPasswordToken VARCHAR(255),
-                resetPasswordExpires VARCHAR(255) -- Usar VARCHAR en lugar de BIGINT para evitar problemas de tipo
+                -- Usar TIMESTAMP sin zona horaria para manejo de fechas de expiración
+                resetPasswordExpires BIGINT 
             );
         `);
         
-        // COMANDO 2: Crear la tabla RECORDS (Separado)
+        // COMANDO 2: Crear la tabla RECORDS
         await client.query(`
             CREATE TABLE IF NOT EXISTS records (
                 id SERIAL PRIMARY KEY, 
@@ -67,7 +75,7 @@ async function initializeDatabase() {
                 paClasificacion VARCHAR(50), 
                 riesgoAEnf VARCHAR(50), 
                 sexo VARCHAR(50), 
-                cip VARCHAR(50), 
+                cip VARCHAR(50) NOT NULL, 
                 grado VARCHAR(50), 
                 apellido VARCHAR(100),
                 nombre VARCHAR(100), 
@@ -78,11 +86,11 @@ async function initializeDatabase() {
                 fecha VARCHAR(50),
                 registradoPor VARCHAR(255),
                 motivo VARCHAR(50),
-                dob VARCHAR(50)
+                dob VARCHAR(50) -- Fecha de Nacimiento
             );
         `);
         
-        console.log("Tablas de base de datos listas.");
+        console.log("✅ Tablas de base de datos verificadas/creadas.");
         
         // *** CÓDIGO TEMPORAL: INSERCIÓN DE USUARIO SUPERADMIN POR DEFECTO ***
         const defaultPassword = 'superadmin'; 
@@ -104,7 +112,6 @@ async function initializeDatabase() {
         
     } catch (err) {
         console.error("Error FATAL al inicializar la base de datos:", err.message);
-        // Lanzamos el error para que Railway lo capture, pero NO forzamos process.exit
         throw err; 
     } finally {
         client.release();
@@ -119,11 +126,13 @@ initializeDatabase();
 function calculateAgeFromDOB(dobString, referenceDateString) {
     if (!dobString || !referenceDateString || dobString.length < 10 || referenceDateString.length < 10) return 0;
     
+    // Asumimos dobString es YYYY-MM-DD y referenceDateString es DD/MM/YYYY
     const [dobYear, dobMonth, dobDay] = dobString.split('-').map(Number);
     const [refDay, refMonth, refYear] = referenceDateString.split('/').map(Number);
     
     let age = refYear - dobYear;
     
+    // Ajuste por el mes y día
     if (refMonth < dobMonth || (refMonth === dobMonth && refDay < dobDay)) {
         age--;
     }
@@ -133,10 +142,11 @@ function calculateAgeFromDOB(dobString, referenceDateString) {
 
 // --- 4. RUTAS DE LA API PARA REGISTROS ---
 
-// [GET] /api/stats (Postgres)
+// [GET] /api/stats (Postgres): Consulta con filtros para la tabla de registros
 app.get('/api/stats', (req, res) => {
-    const { cip, gguu, unidad, sexo, monthYear } = req.query; 
+    const { cip, gguu, unidad, sexo, monthYear, apellidoNombre, edad, aptitud } = req.query; 
 
+    // Ajuste: Ordenar por ID descendente para mostrar los más recientes primero
     let sql = "SELECT * FROM records WHERE 1=1"; 
     let params = [];
 
@@ -146,25 +156,52 @@ app.get('/api/stats', (req, res) => {
     if (unidad) { sql += ` AND unidad = $${params.length + 1}`; params.push(unidad); }
     if (sexo) { sql += ` AND sexo = $${params.length + 1}`; params.push(sexo); }
     
-    if (monthYear) {
+    // Filtro por Apellido/Nombre (busca en ambas columnas)
+    if (apellidoNombre) {
+        // Uso de ILIKE para búsqueda insensible a mayúsculas/minúsculas en Postgres
+        const searchPattern = `%${apellidoNombre}%`;
+        sql += ` AND (apellido ILIKE $${params.length + 1} OR nombre ILIKE $${params.length + 2})`; 
+        params.push(searchPattern, searchPattern);
+    }
+    
+    // Filtro por Edad
+    if (edad) { 
+        // Se asume que edad puede ser un rango o un valor exacto (aquí se trata como exacto o mínimo)
+        sql += ` AND edad = $${params.length + 1}`; 
+        params.push(parseInt(edad)); 
+    }
+    
+    // Filtro por Aptitud (asumimos que busca en paClasificacion o riesgoAEnf)
+    if (aptitud && aptitud !== 'Todas las Aptitudes') { 
+        sql += ` AND (paClasificacion = $${params.length + 1} OR riesgoAEnf = $${params.length + 2})`; 
+        params.push(aptitud, aptitud); 
+    }
+    
+    // Filtro por Mes/Año (asume formato MM/YYYY)
+    if (monthYear && monthYear !== 'Todos los Meses') {
         const pattern = `%/${monthYear}`; 
         sql += ` AND fecha LIKE $${params.length + 1}`; 
         params.push(pattern);
     }
 
-    sql += " ORDER BY id ASC"; 
+    sql += " ORDER BY id DESC"; // Muestra los más recientes primero
 
     pool.query(sql, params)
         .then(result => {
-            if (result.rows.length === 0) return res.status(404).json({ message: "No se encontraron datos que coincidan con los criterios de búsqueda." });
+            // No devolver 404 si la lista está vacía, solo devolver un array vacío.
             res.json(result.rows);
         })
-        .catch(err => res.status(500).json({ error: err.message }));
+        .catch(err => {
+            console.error("Error en GET /api/stats:", err.message);
+            res.status(500).json({ error: "Error interno al obtener los registros." });
+        });
 });
 
 
-// [GET] /api/records/check-monthly/:cip (Postgres)
+// [GET] /api/records/check-monthly/:cip (Postgres) - Lógica de relleno de registros
 app.get('/api/records/check-monthly/:cip', (req, res) => {
+    // ... (Tu código de relleno de registros es correcto y queda igual) ...
+    // No hay necesidad de modificar esta ruta ya que su lógica es robusta.
     const { cip } = req.params;
     const { targetMonthYear } = req.query; 
 
@@ -184,17 +221,21 @@ app.get('/api/records/check-monthly/:cip', (req, res) => {
             let missingMonthsCount = 0;
 
             // --- 2. VERIFICAR SI HAY REGISTROS EN EL MES OBJETIVO ---
+            // Asume que lastRecord.fecha es DD/MM/YYYY
             if (lastRecord && lastRecord.fecha && lastRecord.fecha.includes(targetMonthYearValue)) {
                 return res.json({ alreadyRecorded: true, message: `El CIP ${cip} ya tiene un registro para el mes de ${targetMonthYearValue}.` });
             }
             
             // --- 3. RELLENO DE REGISTROS FALTANTES ---
             if (lastRecord) {
+                // Obtiene el mes y año del último registro
                 const lastDateParts = lastRecord.fecha.split('/');
-                let lastMonth = parseInt(lastDateParts[1]);
+                let lastMonth = parseInt(lastDateParts[1]); // 1-12
                 let lastYear = parseInt(lastDateParts[2]);
 
-                let checkDate = new Date(lastYear, lastMonth, 1); 
+                // Empezar a chequear desde el mes siguiente al último registro
+                let checkDate = new Date(lastYear, lastMonth, 1); // lastMonth es 1-12, Date usa 0-11.
+                                                                 // Si lastMonth es 10, crea un Date con mes 10 (noviembre). OK.
 
                 while (checkDate.getTime() < targetDate.getTime()) {
                     const missingMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
@@ -230,6 +271,7 @@ app.get('/api/records/check-monthly/:cip', (req, res) => {
                         break;
                     }
                     
+                    // Avanzar al siguiente mes
                     checkDate.setMonth(checkDate.getMonth() + 1);
                 }
             }
@@ -247,6 +289,7 @@ app.get('/api/records/check-monthly/:cip', (req, res) => {
 
 // [GET] /api/patient/:dni (Postgres)
 app.get('/api/patient/:dni', (req, res) => {
+    // ... (Tu código de búsqueda de paciente más reciente es correcto y queda igual) ...
     const { dni } = req.params;
     // Busca el registro más reciente del paciente por DNI o CIP
     const sql = "SELECT * FROM records WHERE dni = $1 OR cip = $2 ORDER BY id DESC LIMIT 1";
@@ -264,14 +307,14 @@ app.get('/api/patient/:dni', (req, res) => {
                 apellido: row.apellido,
                 nombre: row.nombre,
                 edad: row.edad, 
-                fechaNacimiento: row.dob, 
+                fechaNacimiento: row.dob, // Mapeado de dob a fechaNacimiento para el frontend
                 grado: row.grado          
             });
         })
         .catch(err => res.status(500).json({ error: err.message }));
 });
 
-// [GET] /api/records (Postgres)
+// [GET] /api/records (Postgres): Obtiene TODOS los records (Solo para debug/admin)
 app.get('/api/records', (req, res) => {
     const sql = "SELECT * FROM records ORDER BY id DESC";
     pool.query(sql)
@@ -279,12 +322,12 @@ app.get('/api/records', (req, res) => {
         .catch(err => res.status(500).json({ error: err.message }));
 });
 
-// [POST] /api/records (Postgres)
+// [POST] /api/records (Postgres): GUARDAR REGISTRO
 app.post('/api/records', (req, res) => {
+    // Desestructurar todos los campos del body
     const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob } = req.body;
     
     // SQL con todos los 20 campos para inserción
-    // La lista de columnas coincide con la definición de la tabla (20 columnas sin id)
     const sql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING id`;
     
     // El array de valores tiene que coincidir exactamente en orden
@@ -294,17 +337,19 @@ app.post('/api/records', (req, res) => {
         .then(result => res.status(201).json({ message: "Registro guardado exitosamente", id: result.rows[0].id }))
         .catch(err => {
              // LOG DE DEBUG CRÍTICO: Muestra el error exacto de Postgres
-             console.error("ERROR DE POSTGRES EN /api/records:", err.message, "Detalles:", err);
-             res.status(500).json({ error: err.message });
+             console.error("ERROR DE POSTGRES EN /api/records:", err.message, "Detalles:", err.detail);
+             // Si es un error de clave foránea o dato no permitido, ayuda a debuggear
+             res.status(500).json({ error: "Error al guardar el registro: " + err.message });
         });
 });
 
 // [PUT] /api/records/:id (Postgres)
 app.put('/api/records/:id', (req, res) => {
+    // ... (Tu código de actualización es correcto y queda igual) ...
     const { id } = req.params;
     const { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo, dob, fecha } = req.body;
     
-    // SQL con todos los 17 campos para actualización
+    // SQL con todos los 19 campos para actualización
     const sql = `UPDATE records SET 
                     gguu = $1, unidad = $2, dni = $3, pa = $4, pab = $5, paClasificacion = $6, riesgoAEnf = $7,
                     sexo = $8, cip = $9, grado = $10, apellido = $11, nombre = $12, 
@@ -323,6 +368,7 @@ app.put('/api/records/:id', (req, res) => {
 
 // [DELETE] /api/records/:id (Postgres)
 app.delete('/api/records/:id', (req, res) => {
+    // ... (Tu código de eliminación es correcto y queda igual) ...
     const { id } = req.params;
     const sql = "DELETE FROM records WHERE id = $1";
     pool.query(sql, [id])
@@ -334,10 +380,10 @@ app.delete('/api/records/:id', (req, res) => {
 });
 
 
-// [POST] /api/export-excel (Postgres - No requiere cambios en la lógica de la DB, solo en la consulta)
+// [POST] /api/export-excel (Postgres)
 app.post('/api/export-excel', async (req, res) => {
+    // ... (Tu código de exportación a Excel es correcto y queda igual) ...
     try {
-        // ... (el resto de la lógica de ExcelJS es la misma)
         const { records, reportMonth } = req.body; 
         
         const workbook = new ExcelJS.Workbook();
@@ -371,10 +417,13 @@ app.post('/api/export-excel', async (req, res) => {
             const rowNumber = 7 + index; 
             const dataRow = worksheet.getRow(rowNumber);
             
-            const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase();
+            // Asumo que tu objeto 'record' en el frontend tiene la propiedad 'clasificacionMINSA'
+            // Si el nombre es diferente, el error está en cómo creas el objeto para la exportación.
+            const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase(); 
             const paClasificacion = (record.paClasificacion || 'N/A').toUpperCase();
             const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
-            const resultado = (record.resultado || 'N/A').toUpperCase();
+            // Asumo que 'resultado' es el campo de Aptitud Final
+            const resultado = (record.resultado || 'N/A').toUpperCase(); 
             
             let digitadorDisplay = record.registradoPor || '';
             if (digitadorDisplay) {
@@ -434,6 +483,7 @@ app.post('/api/export-excel', async (req, res) => {
             });
         });
         
+        // Encabezados del reporte
         worksheet.mergeCells('A1:S2');
         worksheet.getCell('A1').value = 'CONSOLIDADO DEL IMC DE LA III DE AF 2025';
         worksheet.getCell('A1').font = { name: 'Calibri', size: 16, bold: true };
@@ -461,6 +511,7 @@ app.post('/api/export-excel', async (req, res) => {
 
 // [POST] /api/login (Postgres)
 app.post('/api/login', (req, res) => {
+    // ... (Tu código de login es correcto y queda igual) ...
     const { cip, password } = req.body;
     if (!cip || !password) return res.status(400).json({ message: "CIP y contraseña requeridos." });
     
@@ -471,7 +522,6 @@ app.post('/api/login', (req, res) => {
             if (!user) return res.status(401).json({ message: "Credenciales incorrectas." });
             
             bcrypt.compare(password, user.password, (bcryptErr, result) => {
-                // LOG DE DEBUG: Si bcrypt falla, registrar la razón
                 if (bcryptErr) {
                     console.error("Error en bcrypt.compare (Login):", bcryptErr);
                     return res.status(500).json({ message: "Error del servidor." });
@@ -488,6 +538,7 @@ app.post('/api/login', (req, res) => {
 
 // [PUT] /api/users/password/:cip (Postgres)
 app.put('/api/users/password/:cip', (req, res) => {
+    // ... (Tu código de actualización de contraseña es correcto y queda igual) ...
     const { cip } = req.params;
     const { newPassword } = req.body;
     if (!newPassword) return res.status(400).json({ message: "Nueva contraseña requerida." });
@@ -508,6 +559,7 @@ app.put('/api/users/password/:cip', (req, res) => {
 
 // [GET] /api/users (Postgres)
 app.get('/api/users', (req, res) => {
+    // ... (Tu código de obtener usuarios es correcto y queda igual) ...
     const sql = "SELECT cip, fullName, role FROM users";
     pool.query(sql)
         .then(result => res.json(result.rows))
@@ -516,6 +568,7 @@ app.get('/api/users', (req, res) => {
 
 // [POST] /api/users (Postgres)
 app.post('/api/users', (req, res) => {
+    // ... (Tu código de crear usuario es correcto y queda igual) ...
     const { cip, fullName, password, email } = req.body;
     if (!cip || !fullName || !password) return res.status(400).json({ message: "CIP, Nombre y Contraseña requeridos." });
     
@@ -541,21 +594,24 @@ app.post('/api/users', (req, res) => {
 
 // [DELETE] /api/users/:cip (Postgres)
 app.delete('/api/users/:cip', (req, res) => {
+    // ... (Tu código de eliminar usuario es correcto y queda igual) ...
     const { cip } = req.params;
     const sql = "DELETE FROM users WHERE cip = $1";
     pool.query(sql, [cip])
         .then(result => {
             if (result.rowCount === 0) return res.status(404).json({ message: "Usuario no encontrado." });
-            res.json({ message: `Registro con ID ${id} eliminado.` });
+            // Este mensaje de error estaba incorrecto, usa 'Usuario' en lugar de 'Registro'
+            res.json({ message: `Usuario con CIP ${cip} eliminado.` }); 
         })
         .catch(err => res.status(500).json({ error: err.message }));
 });
 
 
-// --- NUEVAS RUTAS PARA RECUPERACIÓN DE CONTRASEÑA ---
+// --- RUTAS DE API PARA RECUPERACIÓN DE CONTRASEÑA ---
 
 // [POST] /api/forgot-password (Postgres)
 app.post('/api/forgot-password', (req, res) => {
+    // ... (Tu código de forgot-password es correcto y queda igual) ...
     const { cip } = req.body;
     const selectSql = `SELECT * FROM users WHERE cip = $1`;
     
@@ -567,15 +623,13 @@ app.post('/api/forgot-password', (req, res) => {
             }
             
             const token = crypto.randomBytes(20).toString('hex');
-            const expires = Date.now() + 3600000; // 1 hora
+            const expires = Date.now() + 3600000; // 1 hora (Almacenado como BIGINT)
             const updateSql = `UPDATE users SET resetPasswordToken = $1, resetPasswordExpires = $2 WHERE cip = $3`;
             
             pool.query(updateSql, [token, expires, cip])
                 .then(async () => {
-                    // *** CAMBIO DE SEGURIDAD: USAR VARIABLES DE ENTORNO ***
                     const emailUser = process.env.EMAIL_USER;
                     const emailPass = process.env.EMAIL_PASS;
-                    // *** FIN CAMBIO DE SEGURIDAD ***
 
                     if (!emailUser || !emailPass) {
                         console.error("ERROR: Credenciales de Nodemailer no configuradas. Por favor, configure EMAIL_USER y EMAIL_PASS en Railway.");
@@ -609,7 +663,9 @@ app.post('/api/forgot-password', (req, res) => {
 
 // [POST] /api/reset-password (Postgres)
 app.post('/api/reset-password', (req, res) => {
+    // ... (Tu código de reset-password es correcto y queda igual) ...
     const { token, password } = req.body;
+    // La comparación del token y la expiración se hace aquí
     const selectSql = `SELECT * FROM users WHERE resetPasswordToken = $1 AND resetPasswordExpires > $2`;
     
     pool.query(selectSql, [token, Date.now()])
