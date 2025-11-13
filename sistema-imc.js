@@ -38,7 +38,7 @@ function displayMessage(title, text, type) {
 }
 
 
-// --- FUNCIONES PARA GESTIÓN DE USUARIOS (MEJORADAS) ---
+// --- FUNCIONES PARA GESTIÓN DE USUARIOS (CORREGIDA: SOLUCIONA EL 'undefined') ---
 
 async function fetchAndDisplayUsers() {
     const tableBody = document.getElementById('users-table-body');
@@ -57,18 +57,25 @@ async function fetchAndDisplayUsers() {
         }
 
         users.forEach(user => {
-            let userFullNameDisplay = `${user.fullName}`;
-            
+            // *** INICIO DE CORRECCIÓN PARA EL 'undefined' ***
+            // Usar 'user.fullName' pero con un fallback (||) si es nulo o indefinido.
+            let userFullNameDisplay = user.fullName || 'Nombre Desconocido'; 
+            let roleDisplay = '';
+
             if (user.role === 'admin') {
-                userFullNameDisplay = `${user.fullName} (ADMINISTRADOR)`;
+                roleDisplay = `(ADMINISTRADOR)`;
             } else if (user.role === 'superadmin') {
-                userFullNameDisplay = `${user.fullName} (SUPERADMIN)`;
+                roleDisplay = `(SUPERADMIN)`;
             }
+            
+            let finalDisplay = `${userFullNameDisplay} ${roleDisplay}`;
+
+            // *** FIN DE CORRECCIÓN ***
 
             const row = tableBody.insertRow();
             row.innerHTML = `
                 <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${user.cip}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm">${userFullNameDisplay}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm">${finalDisplay}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-center">
                     <button onclick="handleEditUser('${user.cip}')" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Cambiar Contraseña">
                         <i class="fas fa-pencil-alt"></i>
@@ -181,6 +188,7 @@ async function updateUI() {
         userInfo.classList.add('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
 
         if (monitoringTextEl && currentAdminFullName) {
+            // Se usa Katherin Giuiliana Ponce Canahuiere en el ejemplo, asumimos que este campo es correcto al loguear
             monitoringTextEl.innerHTML = `
                 <i class="fas fa-check-double mr-3 text-color-accent-gold"></i>
                 Monitoreo Activo: <span class="text-color-accent-lime">${currentAdminFullName}</span>`;
