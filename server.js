@@ -1,4 +1,4 @@
-// server.js (Versión Final con Corrección de Actualización de Usuario)
+// server.js (Versión Final con Gestión Masiva de Inasistencia)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -119,9 +119,9 @@ async function initializeDatabase() {
 initializeDatabase();
 
 
-// NUEVA FUNCIÓN: Cálculo de edad a partir de la fecha de nacimiento (DOB)
+// FUNCIÓN DE UTILIDAD: Cálculo de edad a partir de la fecha de nacimiento (DOB)
 function calculateAgeFromDOB(dobString, referenceDateString) {
-    if (!dobString || !referenceDateString || dobString.length < 10 || referenceDateString.length < 10) return 0;
+    if (!dobString || !referenceDateString || dobString.length < 10) return 0;
     
     // Asumimos dobString es YYYY-MM-DD y referenceDateString es DD/MM/YYYY
     const [dobYear, dobMonth, dobDay] = dobString.split('-').map(Number);
@@ -134,6 +134,71 @@ function calculateAgeFromDOB(dobString, referenceDateString) {
         age--;
     }
     return age;
+}
+
+// ***************************************************************
+// *** FUNCIÓN CLAVE: RELLENAR MESES FALTANTES EN EL BACKEND ***
+// ***************************************************************
+function generateMissingRecords(records, endMonthYear) {
+    if (records.length === 0) return [];
+    
+    // 1. Mapeo inicial
+    const recordedMonths = new Set(records.map(r => r.fecha.substring(3))); // MM/YYYY
+    const recordsByMonth = records.reduce((acc, r) => {
+        acc[r.fecha.substring(3)] = r; // Clave: MM/YYYY
+        return acc;
+    }, {});
+    
+    // 2. Ordenar por fecha real para encontrar el primer registro (ASC)
+    const sortedRecords = [...records].sort((a, b) => {
+        const [dA, mA, yA] = a.fecha.split('/').map(Number);
+        const [dB, mB, yB] = b.fecha.split('/').map(Number);
+        return new Date(yA, mA - 1, dA).getTime() - new Date(yB, mB - 1, dB).getTime();
+    });
+
+    const firstRecord = sortedRecords[0];
+    if (!firstRecord) return [];
+
+    let [startMonth, startYear] = firstRecord.fecha.substring(3).split('/').map(Number);
+    let [endMonth, endYear] = endMonthYear.split('/').map(Number);
+    
+    let allRecordsMap = { ...recordsByMonth };
+    let checkDate = new Date(startYear, startMonth - 1, 1);
+    let endDate = new Date(endYear, endMonth - 1, 1);
+    
+    // 3. Iterar y rellenar
+    while (checkDate.getTime() <= endDate.getTime()) {
+        const checkMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
+        const checkYear = checkDate.getFullYear();
+        const checkMonthYear = `${checkMonth}/${checkYear}`;
+        const checkDateFormatted = `01/${checkMonth}/${checkYear}`;
+
+        if (!allRecordsMap[checkMonthYear]) { // Si no existe en el mapa
+            const ageAtMissingDate = calculateAgeFromDOB(firstRecord.dob, checkDateFormatted); 
+            
+            const missingRecord = {
+                ...firstRecord,
+                id: null, // No tiene ID de DB
+                fecha: checkDateFormatted, 
+                peso: 0, altura: 0.01, imc: 0, pab: 0, 
+                pa: 'N/A', paClasificacion: 'N/A', riesgoAEnf: 'N/A',
+                motivo: 'NO ASISTIÓ', 
+                registradoPor: 'SISTEMA (NO ASISTIÓ)', 
+                edad: ageAtMissingDate 
+            };
+            allRecordsMap[checkMonthYear] = missingRecord;
+        }
+
+        // Avanzar al siguiente mes
+        checkDate.setMonth(checkDate.getMonth() + 1);
+    }
+    
+    // 4. Devolver un array con todos los registros, ordenado DESCENDENTE por fecha
+    return Object.values(allRecordsMap).sort((a, b) => {
+        const [dA, mA, yA] = a.fecha.split('/').map(Number);
+        const [dB, mB, yB] = b.fecha.split('/').map(Number);
+        return new Date(yB, mB - 1, dB).getTime() - new Date(yA, mA - 1, dA).getTime();
+    });
 }
 
 
@@ -197,7 +262,6 @@ app.get('/api/stats', (req, res) => {
 
 // [GET] /api/records/check-monthly/:cip (Postgres) - Lógica de relleno de registros
 app.get('/api/records/check-monthly/:cip', (req, res) => {
-    // ... (Tu código de relleno de registros es correcto y queda igual) ...
     const { cip } = req.params;
     const { targetMonthYear } = req.query; 
 
@@ -371,12 +435,107 @@ app.delete('/api/records/:id', (req, res) => {
         .catch(err => res.status(500).json({ error: err.message }));
 });
 
+// ***************************************************************
+// *** RUTA AÑADIDA: GESTIÓN MASIVA DE INASISTENCIA ***
+// ***************************************************************
+// [POST] /api/records/mass-no-show
+app.post('/api/records/mass-no-show', async (req, res) => {
+    const { targetMonthYear } = req.body; // Formato esperado: MM/YYYY (Ej: 10/2025)
+
+    if (!targetMonthYear || targetMonthYear.length !== 7 || targetMonthYear.indexOf('/') !== 2) {
+        return res.status(400).json({ error: "Mes de registro inválido. Use formato MM/YYYY." });
+    }
+
+    // Usaremos el día 01 del mes siguiente al de destino para establecer el límite
+    const [targetMonth, targetYear] = targetMonthYear.split('/').map(Number);
+    const dateLimit = new Date(targetYear, targetMonth, 1); // 1er día del mes SGT
+    
+    // Seguridad: No permitir registro masivo en un mes futuro o el mes actual
+    if (dateLimit.getTime() > new Date().getTime() + 86400000) { // Añadimos 1 día para tolerancia
+        return res.status(403).json({ error: "No se permite el registro masivo en meses futuros o el mes actual." });
+    }
+
+    try {
+        // 1. Obtener la información base (el registro más reciente de CADA CIP)
+        // Usamos una subconsulta para obtener el último registro por CIP
+        const latestRecordsSql = `
+            SELECT DISTINCT ON (cip) * 
+            FROM records 
+            ORDER BY cip, id DESC;
+        `;
+        const allLatestRecords = await pool.query(latestRecordsSql);
+        const allPersonnel = allLatestRecords.rows;
+
+        if (allPersonnel.length === 0) {
+            return res.status(404).json({ message: "No hay personal registrado en la base de datos para monitorear." });
+        }
+
+        let insertedCount = 0;
+        const insertSql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`;
+
+        for (const record of allPersonnel) {
+            // Verificar si YA tiene un registro en el mes objetivo
+            const checkSql = "SELECT id FROM records WHERE cip = $1 AND fecha LIKE $2 LIMIT 1";
+            const alreadyExists = await pool.query(checkSql, [record.cip, `%/${targetMonthYear}`]);
+
+            if (alreadyExists.rowCount === 0) {
+                // Si NO tiene registro en el mes objetivo, insertamos NO ASISTIÓ
+                const checkDateFormatted = `01/${targetMonthYear}`;
+                const ageAtMissingDate = calculateAgeFromDOB(record.dob, checkDateFormatted); 
+                
+                const values = [
+                    record.gguu, record.unidad, record.dni, 'N/A', 0, 'N/A', 'N/A', // PA, PAB y Clasif. por defecto
+                    record.sexo, record.cip, record.grado, record.apellido, record.nombre, 
+                    ageAtMissingDate, 0, 0.01, 0, // Peso, Altura, IMC por defecto
+                    checkDateFormatted, 'SISTEMA (INASISTENCIA MASIVA)', 'NO ASISTIÓ', record.dob
+                ];
+                
+                await pool.query(insertSql, values);
+                insertedCount++;
+            }
+        }
+
+        return res.json({ 
+            message: `Proceso masivo completado. Se insertaron ${insertedCount} registros de 'NO ASISTIÓ' para el mes ${targetMonthYear}.`,
+            insertedCount
+        });
+
+    } catch (error) {
+        console.error("Error en el proceso masivo de inasistencia:", error);
+        return res.status(500).json({ error: "Error interno al ejecutar el proceso masivo: " + error.message });
+    }
+});
+
+
 
 // [POST] /api/export-excel (Postgres)
 app.post('/api/export-excel', async (req, res) => {
     try {
         const { records, reportMonth } = req.body; 
         
+        // ****************************************************
+        // *** MODIFICACIÓN: LÓGICA DE RELLENO DE REGISTROS PARA EXPORTACIÓN ***
+        // ****************************************************
+        let finalRecordsToExport = records;
+        
+        // Solo aplicar la lógica de relleno si tenemos al menos un paciente individual para la progresión
+        if (records.length > 0 && records.every(r => r.cip === records[0].cip)) {
+            const targetCip = records[0].cip;
+            
+            // 1. OBTENER TODOS LOS REGISTROS HISTÓRICOS DEL PACIENTE DESDE LA BASE DE DATOS
+            const allPatientRecordsResult = await pool.query("SELECT * FROM records WHERE cip = $1 ORDER BY id DESC", [targetCip]);
+            const allPatientRecords = allPatientRecordsResult.rows;
+
+            // 2. Determinar la fecha de corte (Mes más reciente registrado en el filtro o mes actual)
+            const now = new Date();
+            const endMonthYear = `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+            
+            // 3. RELLENAR LOS MESES FALTANTES
+            // La función generateMissingRecords devolverá el historial completo, rellenando vacíos
+            finalRecordsToExport = generateMissingRecords(allPatientRecords, endMonthYear);
+        }
+        // ****************************************************
+
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('CONSOLIDADO IMC');
         
@@ -404,16 +563,14 @@ app.post('/api/export-excel', async (req, res) => {
             worksheet.getColumn(colNumber).width = (colNumber === 5) ? 30 : 12; 
         });
         
-        records.forEach((record, index) => {
+        finalRecordsToExport.forEach((record, index) => { // ITERAR SOBRE finalRecordsToExport
             const rowNumber = 7 + index; 
             const dataRow = worksheet.getRow(rowNumber);
             
-            // Asumo que tu objeto 'record' en el frontend tiene la propiedad 'clasificacionMINSA'
-            // Si el nombre es diferente, el error está en cómo creas el objeto para la exportación.
+            // Lógica de clasificación a utilizar (asumiendo que frontend ya la ejecutó en la lista de 'records')
             const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase(); 
             const paClasificacion = (record.paClasificacion || 'N/A').toUpperCase();
             const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
-            // Asumo que 'resultado' es el campo de Aptitud Final
             const resultado = (record.resultado || 'N/A').toUpperCase(); 
             
             let digitadorDisplay = record.registradoPor || '';
