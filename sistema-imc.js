@@ -57,9 +57,8 @@ async function fetchAndDisplayUsers() {
         }
 
         users.forEach(user => {
-            // *** INICIO DE CORRECCIÓN PARA EL 'undefined' ***
-            // Usar 'user.fullName' pero con un fallback (||) si es nulo o indefinido.
-            let userFullNameDisplay = user.fullName || 'Nombre Desconocido'; 
+            // *** CORRECCIÓN: Si el nombre es NULL/vacio, usamos solo el rol ***
+            let userFullNameDisplay = user.fullName || ''; // Si es nulo, es una cadena vacía
             let roleDisplay = '';
 
             if (user.role === 'admin') {
@@ -68,7 +67,9 @@ async function fetchAndDisplayUsers() {
                 roleDisplay = `(SUPERADMIN)`;
             }
             
-            let finalDisplay = `${userFullNameDisplay} ${roleDisplay}`;
+            // Si el nombre está vacío, solo mostramos el rol. Si existe, mostramos Nombre + Rol.
+            // Usamos .trim() para evitar que se muestre un espacio extra si user.fullName es una cadena vacía.
+            let finalDisplay = userFullNameDisplay.trim() ? `${userFullNameDisplay} ${roleDisplay}` : roleDisplay;
 
             // *** FIN DE CORRECCIÓN ***
 
@@ -188,7 +189,6 @@ async function updateUI() {
         userInfo.classList.add('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
 
         if (monitoringTextEl && currentAdminFullName) {
-            // Se usa Katherin Giuiliana Ponce Canahuiere en el ejemplo, asumimos que este campo es correcto al loguear
             monitoringTextEl.innerHTML = `
                 <i class="fas fa-check-double mr-3 text-color-accent-gold"></i>
                 Monitoreo Activo: <span class="text-color-accent-lime">${currentAdminFullName}</span>`;
