@@ -853,10 +853,20 @@ function renderProgressionChart(records) {
     const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     
     // ***************************************************************
-    // *** SOLUCIÓN GRÁFICA: REVERTIR PARA ORDEN CRONOLÓGICO ASCENDENTE ***
+    // *** SOLUCIÓN GRÁFICA: ORDEN CRONOLÓGICO ASCENDENTE ***
     // ***************************************************************
-    // La BD devuelve DESC (más reciente arriba), al revertir, obtenemos ASC (más antiguo arriba/izquierda)
-    const chartRecordsAsc = [...records].reverse(); 
+    // 1. Mapear y crear una clave de ordenación (YYYYMMDD)
+    const chartRecordsAsc = [...records].map(r => {
+        // r.fecha es DD/MM/YYYY
+        const parts = r.fecha.split('/'); 
+        const year = parseInt(parts[2]);
+        const month = parseInt(parts[1]);
+        const day = parseInt(parts[0]);
+        // La clave de ordenación cronológica (un número grande)
+        const sortKey = year * 10000 + month * 100 + day; 
+        return { ...r, sortKey };
+    }).sort((a, b) => a.sortKey - b.sortKey); // 2. Ordenar ascendentemente por sortKey (ASC)
+
     
     const labels = chartRecordsAsc.map(r => {
         const parts = r.fecha.split('/'); 
@@ -1344,6 +1354,20 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
     const [regYear, regMonth] = registroMonthYear.split('-');
     const formattedDate = `01/${regMonth}/${regYear}`; 
     const formattedMonthYear = `${regMonth}/${regYear}`; 
+
+    // ***************************************************************
+    // *** AÑADIDO: VALIDACIÓN DE MES FUTURO (UX) ***
+    // ***************************************************************
+    const now = new Date();
+    const currentYearMonth = now.getFullYear() * 100 + (now.getMonth() + 1);
+    const selectedYearMonth = parseInt(regYear) * 100 + parseInt(regMonth);
+
+    if (selectedYearMonth > currentYearMonth) {
+        displayMessage('MES NO PERMITIDO', 'No se permite registrar datos en meses futuros. Por favor, seleccione el mes actual o uno anterior.', 'error');
+        document.getElementById('admin-result-box')?.classList.add('hidden');
+        return;
+    }
+
 
     // VALIDACIÓN DE CAMPOS CLAVE
     if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 18 && gguu && unidad && dni && pa) {
