@@ -294,19 +294,29 @@ function calculateAge(dateOfBirth) {
 }
 
 
-// --- NUEVA FUNCIÓN PARA CLASIFICAR PRESIÓN ARTERIAL (CLASIFICACION) ---
+// ***************************************************************
+// *** MODIFICACIÓN: CLASIFICACIÓN DE PRESIÓN ARTERIAL (AHA 2025)***
+// ***************************************************************
 function getClassificacionPA(paString) {
     if (!paString || !paString.includes('/')) return 'N/A';
     if (paString.toUpperCase() === 'N/A') return 'N/A';
 
     const [sistolicaStr, diastolicaStr] = paString.split('/');
-    const sistolica = parseInt(sistolicaStr);
-    const diastolica = parseInt(diastolicaStr);
+    const PAS = parseInt(sistolicaStr); // Presión Arterial Sistólica
+    const PAD = parseInt(diastolicaStr); // Presión Arterial Diastólica
 
-    if (isNaN(sistolica) || isNaN(diastolica)) return 'N/A';
+    if (isNaN(PAS) || isNaN(PAD)) return 'N/A';
     
-    if (sistolica >= 140 || diastolica >= 90) return 'HIPERTENSION';
-    if (sistolica >= 120 || diastolica >= 80) return 'PRE-HIPERTENSION';
+    // ESTADIO 2: PAS >= 140 O PAD >= 90
+    if (PAS >= 140 || PAD >= 90) return 'HIPERTENSION (ESTADIO 2)';
+    
+    // ESTADIO 1: PAS 130-139 O PAD 80-89
+    if (PAS >= 130 || PAD >= 80) return 'HIPERTENSION (ESTADIO 1)';
+    
+    // ELEVADA: PAS 120-129 Y PAD < 80
+    if (PAS >= 120 && PAD < 80) return 'ELEVADA';
+
+    // NORMAL: PAS < 120 Y PAD < 80
     return 'NORMAL';
 }
 
@@ -371,8 +381,6 @@ function applyMilitaryIMCException(imcReal, sexo, pab) {
 
 
 // --- Función getAptitude (SIMPLIFICADA: SOLO APTO/INAPTO + REGLAS DE EXCEPCIÓN) ---
-// NOTA: Esta función se mantiene con el IMC real para la calculadora pública,
-// pero el listener del Admin la sobrescribe si aplica la excepción.
 function getAptitude(imc, sexo, pab, paString) {
     const imcFloat = parseFloat(imc);
     const pabFloat = parseFloat(pab); 
@@ -394,13 +402,17 @@ function getAptitude(imc, sexo, pab, paString) {
         };
     }
     
-    // 1. Clasificación MINSA (Clasificación de IMC)
-    if (imcFloat < 18.5) clasificacionMINSA = "BAJO PESO";
-    else if (imcFloat <= 24.9) clasificacionMINSA = "NORMAL";
-    else if (imcFloat <= 29.9) clasificacionMINSA = "SOBREPESO";
-    else if (imcFloat <= 34.9) clasificacionMINSA = "OBESIDAD I";
-    else if (imcFloat <= 39.9) clasificacionMINSA = "OBESIDAD II";
-    else clasificacionMINSA = "OBESIDAD III";
+    // ***************************************************************
+    // *** MODIFICACIÓN: CLASIFICACIÓN DE IMC (CUADRO 1) ***
+    // ***************************************************************
+    if (imcFloat < 16) clasificacionMINSA = "DELGADEZ GRADO III";
+    else if (imcFloat < 17) clasificacionMINSA = "DELGADEZ GRADO II";
+    else if (imcFloat < 18.5) clasificacionMINSA = "DELGADEZ GRADO I";
+    else if (imcFloat < 25) clasificacionMINSA = "NORMAL";
+    else if (imcFloat < 30) clasificacionMINSA = "SOBREPESO (PREOBESO)";
+    else if (imcFloat < 35) clasificacionMINSA = "OBESIDAD GRADO I";
+    else if (imcFloat < 40) clasificacionMINSA = "OBESIDAD GRADO II";
+    else clasificacionMINSA = "OBESIDAD GRADO III";
     
     // 2. Clasificación de Riesgo Abdominal (RIESGO A ENF)
     const riesgoAEnf = getRiskByWaist(sexo, pab);
@@ -429,13 +441,12 @@ function getAptitude(imc, sexo, pab, paString) {
 
     // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (LA REGLA DEL PAB ANULADOR)
     let aplicaExcepcion = false;
-    let umbralExcepcion;
     
     // La regla de anulación es: Si es INAPTO y PAB está en RIESGO BAJO (PAB < 94 H, PAB < 80 M)
     if (!esAptoInicial) {
         if (sexo === 'Masculino' && pabFloat < 94) {
             aplicaExcepcion = true;
-        } else if (sexo === 'Femenino' && pabFloat < 80) { // Ojo: Aquí se usa 80, no 84, para la anulación general.
+        } else if (sexo === 'Femenino' && pabFloat < 80) { 
             aplicaExcepcion = true;
         }
     }
@@ -452,7 +463,8 @@ function getAptitude(imc, sexo, pab, paString) {
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Motivo: ${motivoInapto}. INAPTO.`;
     }
     
-    if (resultado.startsWith('APTO') && (paClasificacion === 'HIPERTENSION' || paClasificacion === 'PRE-HIPERTENSION')) {
+    // Ajuste de detalle para la nueva clasificación de PA
+    if (resultado.startsWith('APTO') && (paClasificacion.includes('HIPERTENSION') || paClasificacion === 'ELEVADA')) {
         detalle += ` NOTA: Vigilancia por PA: ${paClasificacion}.`;
     }
 
@@ -470,8 +482,6 @@ function getAptitude(imc, sexo, pab, paString) {
 
 
 // --- 4. Funciones de Autenticación y Administración ---
-// ... (Funciones attemptAdminLogin, logoutAdmin, handleForgotPassword, updateUserPassword, etc. sin cambios) ...
-
 async function attemptAdminLogin() {
     const username = document.getElementById('admin-username').value;
     const password = document.getElementById('admin-password').value;
@@ -527,7 +537,6 @@ async function handleForgotPassword() {
     link.classList.add('pointer-events-none', 'opacity-50');
 
     try {
-        // Enviar la solicitud de recuperación
         const response = await fetch('/api/forgot-password', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }, 
@@ -555,7 +564,7 @@ async function handleForgotPassword() {
     }
 }
 
-// ... (Funciones fetchAndDisplayRecords, saveRecord, deleteRecord, etc. sin cambios) ...
+// ... (Funciones de CRUD y Edición: fetchAndDisplayRecords, saveRecord, deleteRecord, handleEditRecord, cancelEdit, updateRecord. Se asume que no requieren más cambios que los ya hechos) ...
 
 async function fetchAndDisplayRecords() {
     try {
@@ -626,8 +635,6 @@ async function deleteRecord(id) {
     }
 }
 
-// --- FUNCIONES DE EDICIÓN DE REGISTROS (ACTUALIZADAS) ---
-
 function handleEditRecord(id) {
     const recordToEdit = allRecordsFromDB.find(record => record.id === id);
     if (!recordToEdit) {
@@ -646,7 +653,7 @@ function handleEditRecord(id) {
     form.elements['input-role'].value = recordToEdit.grado;
     form.elements['input-lastname'].value = recordToEdit.apellido;
     form.elements['input-firstname'].value = recordToEdit.nombre;
-    // MODIFICADO: DOB no se carga, EDAD se carga directamente
+    // EDAD se carga directamente
     form.elements['input-age-admin'].value = recordToEdit.edad; 
     
     // CARGAR CAMPOS DE PESADA
@@ -666,16 +673,14 @@ function handleEditRecord(id) {
     // FORZAR RECALCULO Y VISUALIZACIÓN al abrir el formulario (SOLUCIÓN UX)
     const imc = calculateIMC(recordToEdit.peso, recordToEdit.altura);
     
-    // Aplicar la regla de excepción si aplica (aunque solo debería ser relevante al guardar)
     const imcExceptionResult = applyMilitaryIMCException(imc, recordToEdit.sexo, recordToEdit.pab);
     const imcToDisplay = imcExceptionResult.imc.toFixed(1); 
     
-    // Usar el IMC corregido para la clasificación en la vista de edición
     const { resultado, detalle } = getAptitude(imcToDisplay, recordToEdit.sexo, recordToEdit.pab, recordToEdit.pa);
 
     const badgeClass = getSimplifiedAptitudeStyle(resultado);
 
-    document.getElementById('admin-bmi-value').textContent = imcToDisplay; // Mostrar el IMC corregido
+    document.getElementById('admin-bmi-value').textContent = imcToDisplay; 
     document.getElementById('admin-aptitude-badge').textContent = resultado;
     document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
     document.getElementById('admin-aptitude-detail').textContent = detalle;
@@ -686,7 +691,7 @@ function handleEditRecord(id) {
     submitButton.innerHTML = '<i class="fas fa-save mr-2"></i> ACTUALIZAR REGISTRO';
     document.querySelector('#admin-record-form h3').innerHTML = '<i class="fas fa-pencil-alt mr-2 text-color-accent-lime"></i> EDITANDO REGISTRO DE PERSONAL';
 
-    // MOSTRAR BOTÓN DE CANCELAR EDICIÓN (Implementado en el pulido anterior)
+    // MOSTRAR BOTÓN DE CANCELAR EDICIÓN
     document.getElementById('cancel-edit-button').style.display = 'block';
 
     isEditMode = true;
@@ -739,7 +744,8 @@ async function updateRecord(id, recordData) {
     }
 }
 
-// ... (Funciones populateMonthFilter, filterTable, renderProgressionChart, renderTable, exportToWord, exportStatsToWord, downloadChartAsImage, exportToExcel sin cambios) ...
+
+// --- 6. Lógica de la Tabla de Registros (Filtros, Renderizado, Exportación) ---
 
 function populateMonthFilter() {
     const filterSelect = document.getElementById('month-filter');
@@ -747,7 +753,6 @@ function populateMonthFilter() {
     
     const monthCounts = allRecordsFromDB.reduce((acc, record) => {
         if (!record.fecha) return acc;
-        // La fecha es DD/MM/YYYY, substring(3) es MM/YYYY
         const monthYear = record.fecha.substring(3); 
         acc[monthYear] = (acc[monthYear] || 0) + 1;
         return acc;
@@ -814,7 +819,6 @@ function filterTable() {
     }
     
     currentFilteredRecords = recordsToDisplay.map(record => {
-        // Al filtrar, usamos el IMC que está guardado en el registro (que ya incluye la excepción)
         const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
         return {
             ...record,
@@ -860,7 +864,6 @@ function renderProgressionChart(records) {
     
     const chartTitle = `${records[0].grado} ${records[0].apellido}, ${records[0].nombre}`;
 
-    // Usar el IMC guardado (que puede ser 29.9 si aplica la excepción)
     const dataPoints = chartRecordsAsc.map(r => r.motivo === 'NO ASISTIÓ' ? null : parseFloat(r.imc));
 
     if (progressionChart) {
@@ -882,7 +885,7 @@ function renderProgressionChart(records) {
                 pointRadius: 5,
                 pointBackgroundColor: dataPoints.map(imc => {
                     if (imc === null) return '#808080';
-                    if (imc >= 25) return '#E74C3C'; // Usa 25 para sobrespeso
+                    if (imc >= 25) return '#E74C3C';
                     return '#008744';
                 })
             }]
@@ -975,15 +978,14 @@ function renderTable(records) {
         const row = tableBody.insertRow();
         row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
         
-        const clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? data.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
+        const clasificacionDisplay = clasificacionMINSA.includes('(EXCEPCIÓN)') ? clasificacionMINSA.toUpperCase() : (clasificacionMINSA === 'NO ASISTIÓ' ? data.motivo.toUpperCase() : clasificacionMINSA.toUpperCase());
         
         const riesgoAbdominalClass = riesgoAEnf === 'RIESGO MUY ALTO' ? 'text-red-500 font-bold' : (riesgoAEnf === 'RIESGO ALTO' ? 'text-color-accent-gold' : 'text-color-primary-green');
-        const paClasificacionClass = paClasificacion === 'HIPERTENSION' ? 'text-red-500 font-bold' : (paClasificacion === 'PRE-HIPERTENSION' ? 'text-yellow-500' : 'text-color-primary-green');
+        const paClasificacionClass = paClasificacion.includes('HIPERTENSION') || paClasificacion === 'ELEVADA' ? 'text-red-500 font-bold' : 'text-color-primary-green';
         
         let actionButtons = '<span>N/A</span>';
         
-        const isSuperadmin = currentUserRole === 'superadmin';
-        const isAdmin = currentUserRole === 'admin' || isSuperadmin; 
+        const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin'; 
 
         if (isAdmin) {
             const isNoAsistio = data.motivo === 'NO ASISTIÓ';
@@ -993,13 +995,12 @@ function renderTable(records) {
                 
             actionButtons = editButton; 
             
-            if (isSuperadmin) {
-                 actionButtons += `
-                    <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                 `;
-            }
+            // MODIFICACIÓN: Permitir eliminar a todos los administradores (admin y superadmin)
+            actionButtons += `
+                <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            `;
         }
         
         row.innerHTML = `
@@ -1063,7 +1064,7 @@ function exportToWord() {
         const textStyleTag = resultado.startsWith('INAPTO') ? inaptoTextStyle : aptoTextStyle;
         const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
         
-        let clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
+        let clasificacionDisplay = clasificacionMINSA.includes('(EXCEPCIÓN)') ? clasificacionMINSA.toUpperCase() : (clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : clasificacionMINSA.toUpperCase());
         
         htmlContent += `<tr>
             <td style="${cellStyle}">${record.unidad || 'N/A'}</td>
@@ -1341,7 +1342,7 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
     const formattedMonthYear = `${regMonth}/${regYear}`; 
 
     // VALIDACIÓN DE CAMPOS CLAVE
-    if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 18 && gguu && unidad && dni && pa) { // Se asume edad mínima de 18
+    if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 18 && gguu && unidad && dni && pa) {
         
         if (!isEditMode) {
             try { 
@@ -1379,7 +1380,6 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
         const imcExceptionResult = applyMilitaryIMCException(imcReal, sexo, pab);
         const imcToSave = imcExceptionResult.imc.toFixed(1); // 29.9 o el IMC Real (1 decimal)
         
-        // Si se sobrescribió, forzamos la Aptitud y la Clasificación. Si no, usamos la lógica normal.
         let finalAptitudeResult;
         
         if (imcExceptionResult.sobrescrito) {
@@ -1400,7 +1400,6 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
             finalAptitudeResult = getAptitude(imcReal, sexo, pab, pa); 
         }
 
-        // DESDE AQUÍ, USAR finalAptitudeResult
         const { resultado, detalle, paClasificacion, riesgoAEnf, motivoInapto } = finalAptitudeResult; 
 
         // VISUALIZACIÓN
@@ -1483,7 +1482,7 @@ async function fetchAndAutoFill(queryType, queryValue) {
         document.getElementById('input-lastname').value = patientData.apellido || '';
         document.getElementById('input-firstname').value = patientData.nombre || '';
         
-        // MODIFICADO: Solo se autocompleta la edad (manual)
+        // Solo se autocompleta la edad (manual)
         document.getElementById('input-age-admin').value = patientData.edad || '';
         // El DOB no se usa, pero se mantiene para la estructura
         if (document.getElementById('input-dob')) { 
