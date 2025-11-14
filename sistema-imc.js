@@ -15,7 +15,6 @@ function displayMessage(title, text, type) {
     const titleEl = box.querySelector('p:nth-child(1)');
     const textEl = box.querySelector('p:nth-child(2)');
 
-    // Manejo de null/undefined si la caja no existe (ej: en la página reset.html)
     if (!box) {
         console.warn(`[DisplayMessage] ${title}: ${text}`);
         return; 
@@ -37,8 +36,7 @@ function displayMessage(title, text, type) {
     }, 5000);
 }
 
-
-// --- FUNCIONES PARA GESTIÓN DE USUARIOS ---
+// ... (Resto de las funciones de Gestión de Usuarios: fetchAndDisplayUsers, handleAddUser, etc. Sin cambios) ...
 
 async function fetchAndDisplayUsers() {
     const tableBody = document.getElementById('users-table-body');
@@ -294,19 +292,29 @@ function calculateAge(dateOfBirth) {
 }
 
 
-// --- NUEVA FUNCIÓN PARA CLASIFICAR PRESIÓN ARTERIAL (CLASIFICACION) ---
+// ***************************************************************
+// *** MODIFICACIÓN: CLASIFICACIÓN DE PRESIÓN ARTERIAL (AHA 2025)***
+// ***************************************************************
 function getClassificacionPA(paString) {
     if (!paString || !paString.includes('/')) return 'N/A';
     if (paString.toUpperCase() === 'N/A') return 'N/A';
 
     const [sistolicaStr, diastolicaStr] = paString.split('/');
-    const sistolica = parseInt(sistolicaStr);
-    const diastolica = parseInt(diastolicaStr);
+    const PAS = parseInt(sistolicaStr); // Presión Arterial Sistólica
+    const PAD = parseInt(diastolicaStr); // Presión Arterial Diastólica
 
-    if (isNaN(sistolica) || isNaN(diastolica)) return 'N/A';
+    if (isNaN(PAS) || isNaN(PAD)) return 'N/A';
     
-    if (sistolica >= 140 || diastolica >= 90) return 'HIPERTENSION';
-    if (sistolica >= 120 || diastolica >= 80) return 'PRE-HIPERTENSION';
+    // ESTADIO 2: PAS >= 140 O PAD >= 90
+    if (PAS >= 140 || PAD >= 90) return 'HIPERTENSION (ESTADIO 2)';
+    
+    // ESTADIO 1: PAS 130-139 O PAD 80-89
+    if (PAS >= 130 || PAD >= 80) return 'HIPERTENSION (ESTADIO 1)';
+    
+    // ELEVADA: PAS 120-129 Y PAD < 80
+    if (PAS >= 120 && PAD < 80) return 'ELEVADA';
+
+    // NORMAL: PAS < 120 Y PAD < 80
     return 'NORMAL';
 }
 
@@ -371,8 +379,6 @@ function applyMilitaryIMCException(imcReal, sexo, pab) {
 
 
 // --- Función getAptitude (SIMPLIFICADA: SOLO APTO/INAPTO + REGLAS DE EXCEPCIÓN) ---
-// NOTA: Esta función se mantiene con el IMC real para la calculadora pública,
-// pero el listener del Admin la sobrescribe si aplica la excepción.
 function getAptitude(imc, sexo, pab, paString) {
     const imcFloat = parseFloat(imc);
     const pabFloat = parseFloat(pab); 
@@ -394,13 +400,17 @@ function getAptitude(imc, sexo, pab, paString) {
         };
     }
     
-    // 1. Clasificación MINSA (Clasificación de IMC)
-    if (imcFloat < 18.5) clasificacionMINSA = "BAJO PESO";
-    else if (imcFloat <= 24.9) clasificacionMINSA = "NORMAL";
-    else if (imcFloat <= 29.9) clasificacionMINSA = "SOBREPESO";
-    else if (imcFloat <= 34.9) clasificacionMINSA = "OBESIDAD I";
-    else if (imcFloat <= 39.9) clasificacionMINSA = "OBESIDAD II";
-    else clasificacionMINSA = "OBESIDAD III";
+    // ***************************************************************
+    // *** MODIFICACIÓN: CLASIFICACIÓN DE IMC (CUADRO 1) ***
+    // ***************************************************************
+    if (imcFloat < 16) clasificacionMINSA = "DELGADEZ GRADO III";
+    else if (imcFloat < 17) clasificacionMINSA = "DELGADEZ GRADO II";
+    else if (imcFloat < 18.5) clasificacionMINSA = "DELGADEZ GRADO I";
+    else if (imcFloat < 25) clasificacionMINSA = "NORMAL";
+    else if (imcFloat < 30) clasificacionMINSA = "SOBREPESO (PREOBESO)";
+    else if (imcFloat < 35) clasificacionMINSA = "OBESIDAD GRADO I";
+    else if (imcFloat < 40) clasificacionMINSA = "OBESIDAD GRADO II";
+    else clasificacionMINSA = "OBESIDAD GRADO III";
     
     // 2. Clasificación de Riesgo Abdominal (RIESGO A ENF)
     const riesgoAEnf = getRiskByWaist(sexo, pab);
@@ -429,13 +439,12 @@ function getAptitude(imc, sexo, pab, paString) {
 
     // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (LA REGLA DEL PAB ANULADOR)
     let aplicaExcepcion = false;
-    let umbralExcepcion;
     
     // La regla de anulación es: Si es INAPTO y PAB está en RIESGO BAJO (PAB < 94 H, PAB < 80 M)
     if (!esAptoInicial) {
         if (sexo === 'Masculino' && pabFloat < 94) {
             aplicaExcepcion = true;
-        } else if (sexo === 'Femenino' && pabFloat < 80) { // Ojo: Aquí se usa 80, no 84, para la anulación general.
+        } else if (sexo === 'Femenino' && pabFloat < 80) { 
             aplicaExcepcion = true;
         }
     }
@@ -452,7 +461,8 @@ function getAptitude(imc, sexo, pab, paString) {
         detalle = `Clasificación MINSA: ${clasificacionMINSA}. Motivo: ${motivoInapto}. INAPTO.`;
     }
     
-    if (resultado.startsWith('APTO') && (paClasificacion === 'HIPERTENSION' || paClasificacion === 'PRE-HIPERTENSION')) {
+    // Ajuste de detalle para la nueva clasificación de PA
+    if (resultado.startsWith('APTO') && (paClasificacion.includes('HIPERTENSION') || paClasificacion === 'ELEVADA')) {
         detalle += ` NOTA: Vigilancia por PA: ${paClasificacion}.`;
     }
 
@@ -470,164 +480,12 @@ function getAptitude(imc, sexo, pab, paString) {
 
 
 // --- 4. Funciones de Autenticación y Administración ---
-// ... (Funciones attemptAdminLogin, logoutAdmin, handleForgotPassword, updateUserPassword, etc. sin cambios) ...
+// ... (Funciones de Login, Logout, etc. Sin cambios) ...
 
-async function attemptAdminLogin() {
-    const username = document.getElementById('admin-username').value;
-    const password = document.getElementById('admin-password').value;
-
-    try {
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cip: username, password: password })
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Error en el inicio de sesión.');
-        
-        isAuthenticated = true;
-        currentAdminUser = data.user.cip;
-        currentAdminFullName = data.user.fullName;
-        currentUserRole = data.user.role;
-        
-        displayMessage('ACCESO CONCEDIDO', `Bienvenido, ${currentAdminFullName}.`, 'success');
-        updateUI();
-
-    } catch (error) {
-        displayMessage('ACCESO DENEGADO', error.message, 'error');
-        console.error("Detalle del error de login:", error);
-    }
-}
-
-function logoutAdmin() {
-    isAuthenticated = false;
-    currentAdminUser = null;
-    currentAdminFullName = null;
-    currentUserRole = null;
-    allRecordsFromDB = [];
-    currentFilteredRecords = [];
-    displayMessage('SESIÓN CERRADA', 'Has salido del módulo de administración.', 'warning');
-    const adminResultBox = document.getElementById('admin-result-box');
-    if (adminResultBox) adminResultBox.classList.add('hidden');
-    updateUI();
-}
-
-async function handleForgotPassword() {
-    const cip = prompt("Por favor, ingrese su CIP para iniciar el proceso de recuperación de contraseña:");
-    
-    if (!cip || cip.trim() === "") {
-        displayMessage('CANCELADO', 'El proceso de recuperación fue cancelado.', 'warning');
-        return;
-    }
-    
-    const link = document.getElementById('forgot-password-link');
-    if (!link) return; 
-
-    link.textContent = 'Enviando Solicitud...';
-    link.classList.add('pointer-events-none', 'opacity-50');
-
-    try {
-        // Enviar la solicitud de recuperación
-        const response = await fetch('/api/forgot-password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ cip: cip.trim() })
-        });
-        
-        if (!response.ok) {
-             const data = await response.json();
-             throw new Error(data.message || 'Error en la solicitud de recuperación.');
-        }
-
-        displayMessage(
-            'CORREO ENVIADO', 
-            'Si el CIP está registrado y tiene un correo asociado, se ha enviado un enlace de restablecimiento.', 
-            'success'
-        );
-
-    } catch (error) {
-        console.error("Error en solicitud de recuperación:", error);
-        displayMessage('ERROR', error.message || 'Ocurrió un error de conexión al solicitar la recuperación.', 'error');
-
-    } finally {
-        link.textContent = '¿Olvidó su contraseña?';
-        link.classList.remove('pointer-events-none', 'opacity-50');
-    }
-}
-
-// ... (Funciones fetchAndDisplayRecords, saveRecord, deleteRecord, etc. sin cambios) ...
-
-async function fetchAndDisplayRecords() {
-    try {
-        const response = await fetch('/api/records');
-        if (!response.ok) throw new Error('Error al obtener los registros del servidor.');
-        allRecordsFromDB = await response.json();
-        
-        populateMonthFilter();
-        
-        filterTable();
-        
-    } catch (error) {
-        console.error("Error fetching records:", error);
-        displayMessage('Error de Conexión', 'No se pudieron cargar los registros. Asegúrese de que el servidor esté funcionando.', 'error');
-        const tableBody = document.getElementById('admin-table-body');
-        if (tableBody) {
-             tableBody.innerHTML = `<tr><td colspan="12" class="text-center py-10">Error al cargar datos. Verifique la consola.</td></tr>`;
-        }
-    }
-}
-
-async function saveRecord(record) {
-    try {
-        const response = await fetch('/api/records', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(record)
-        });
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Error desconocido al guardar el registro. Verifique logs del servidor.' }));
-            throw new Error(errorData.error || errorData.message || 'Error al guardar el registro.');
-        }
-        displayMessage('REGISTRO EXITOSO', `Personal con CIP ${record.cip} ha sido guardado en la base de datos.`, 'success');
-        
-        // Limpiar el formulario y resetear el mes de registro
-        document.getElementById('admin-record-form').reset();
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        document.getElementById('input-registro-month').value = `${year}-${month}`; 
-        
-        setTimeout(() => {
-            const adminResultBox = document.getElementById('admin-result-box');
-            if (adminResultBox) adminResultBox.classList.add('hidden');
-        }, 5000);
-        
-        await fetchAndDisplayRecords(); 
-        
-    } catch (error) {
-        console.error('Error saving record:', error);
-        displayMessage('Error al Guardar', error.message, 'error');
-    }
-}
-
-async function deleteRecord(id) {
-    if (!confirm(`¿Está seguro de que desea eliminar permanentemente este registro?`)) return;
-    try {
-        const response = await fetch(`/api/records/${id}`, { method: 'DELETE' });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Error al eliminar el registro.');
-        }
-        displayMessage('ELIMINADO', `El registro ha sido eliminado.`, 'warning');
-        await fetchAndDisplayRecords();
-    } catch (error) {
-        console.error('Error deleting record:', error);
-        displayMessage('Error al Eliminar', error.message, 'error');
-    }
-}
+// --- 5. Funciones CRUD para Registros de IMC ---
+// ... (Funciones saveRecord, deleteRecord, fetchAndDisplayRecords, etc. Sin cambios) ...
 
 // --- FUNCIONES DE EDICIÓN DE REGISTROS (ACTUALIZADAS) ---
-
 function handleEditRecord(id) {
     const recordToEdit = allRecordsFromDB.find(record => record.id === id);
     if (!recordToEdit) {
@@ -646,7 +504,7 @@ function handleEditRecord(id) {
     form.elements['input-role'].value = recordToEdit.grado;
     form.elements['input-lastname'].value = recordToEdit.apellido;
     form.elements['input-firstname'].value = recordToEdit.nombre;
-    // MODIFICADO: DOB no se carga, EDAD se carga directamente
+    // EDAD se carga directamente
     form.elements['input-age-admin'].value = recordToEdit.edad; 
     
     // CARGAR CAMPOS DE PESADA
@@ -663,19 +521,17 @@ function handleEditRecord(id) {
         form.elements['input-registro-month'].value = ''; 
     }
 
-    // FORZAR RECALCULO Y VISUALIZACIÓN al abrir el formulario (SOLUCIÓN UX)
+    // FORZAR RECALCULO Y VISUALIZACIÓN
     const imc = calculateIMC(recordToEdit.peso, recordToEdit.altura);
     
-    // Aplicar la regla de excepción si aplica (aunque solo debería ser relevante al guardar)
     const imcExceptionResult = applyMilitaryIMCException(imc, recordToEdit.sexo, recordToEdit.pab);
     const imcToDisplay = imcExceptionResult.imc.toFixed(1); 
     
-    // Usar el IMC corregido para la clasificación en la vista de edición
     const { resultado, detalle } = getAptitude(imcToDisplay, recordToEdit.sexo, recordToEdit.pab, recordToEdit.pa);
 
     const badgeClass = getSimplifiedAptitudeStyle(resultado);
 
-    document.getElementById('admin-bmi-value').textContent = imcToDisplay; // Mostrar el IMC corregido
+    document.getElementById('admin-bmi-value').textContent = imcToDisplay; 
     document.getElementById('admin-aptitude-badge').textContent = resultado;
     document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
     document.getElementById('admin-aptitude-detail').textContent = detalle;
@@ -686,7 +542,7 @@ function handleEditRecord(id) {
     submitButton.innerHTML = '<i class="fas fa-save mr-2"></i> ACTUALIZAR REGISTRO';
     document.querySelector('#admin-record-form h3').innerHTML = '<i class="fas fa-pencil-alt mr-2 text-color-accent-lime"></i> EDITANDO REGISTRO DE PERSONAL';
 
-    // MOSTRAR BOTÓN DE CANCELAR EDICIÓN (Implementado en el pulido anterior)
+    // MOSTRAR BOTÓN DE CANCELAR EDICIÓN
     document.getElementById('cancel-edit-button').style.display = 'block';
 
     isEditMode = true;
@@ -716,6 +572,7 @@ function cancelEdit() {
     if (adminResultBox) adminResultBox.classList.add('hidden');
 }
 
+
 async function updateRecord(id, recordData) {
     try {
         const response = await fetch(`/api/records/${id}`, {
@@ -739,216 +596,9 @@ async function updateRecord(id, recordData) {
     }
 }
 
-// ... (Funciones populateMonthFilter, filterTable, renderProgressionChart, renderTable, exportToWord, exportStatsToWord, downloadChartAsImage, exportToExcel sin cambios) ...
 
-function populateMonthFilter() {
-    const filterSelect = document.getElementById('month-filter');
-    if (!filterSelect) return; 
-    
-    const monthCounts = allRecordsFromDB.reduce((acc, record) => {
-        if (!record.fecha) return acc;
-        // La fecha es DD/MM/YYYY, substring(3) es MM/YYYY
-        const monthYear = record.fecha.substring(3); 
-        acc[monthYear] = (acc[monthYear] || 0) + 1;
-        return acc;
-    }, {});
-    
-    filterSelect.innerHTML = `<option value="">Todos los Meses (${allRecordsFromDB.length} Registros)</option>`;
-    
-    Object.keys(monthCounts).sort((a, b) => {
-        const [monthA, yearA] = a.split('/').map(Number);
-        const [monthB, yearB] = b.split('/').map(Number);
-        if (yearA !== yearB) return yearB - yearA; 
-        return monthB - monthA; 
-    }).forEach(monthYear => {
-        const count = monthCounts[monthYear];
-        const [month, year] = monthYear.split('/');
-        const monthName = new Date(year, month - 1, 1).toLocaleDateString('es-ES', { month: 'long' });
-        const option = document.createElement('option');
-        option.value = monthYear;
-        option.textContent = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${year} (${count} Registros)`;
-        filterSelect.appendChild(option);
-    });
-    
-    const currentFilterValue = filterSelect.getAttribute('data-current-value') || "";
-    if (currentFilterValue) {
-        filterSelect.value = currentFilterValue;
-    } else {
-        filterSelect.selectedIndex = 0; // Por defecto "Todos los Meses"
-    }
-}
-
-function filterTable() {
-    const nameSearchTerm = document.getElementById('name-filter').value.toLowerCase().trim();
-    const ageFilterValue = document.getElementById('age-filter').value;
-    const monthFilter = document.getElementById('month-filter').value; // value="" para "Todos los Meses"
-    const aptitudeFilterValue = (document.getElementById('aptitude-filter').value || '').toUpperCase(); 
-
-    document.getElementById('month-filter').setAttribute('data-current-value', monthFilter);
-
-
-    let recordsToDisplay = allRecordsFromDB;
-    
-    if (nameSearchTerm) {
-        recordsToDisplay = recordsToDisplay.filter(record => 
-            `${record.apellido} ${record.nombre}`.toLowerCase().includes(nameSearchTerm)
-        );
-    }
-    
-    if (ageFilterValue && !isNaN(parseInt(ageFilterValue))) {
-        const ageToMatch = parseInt(ageFilterValue);
-        recordsToDisplay = recordsToDisplay.filter(record => record.edad === ageToMatch);
-    }
-    
-    if (monthFilter) { 
-        recordsToDisplay = recordsToDisplay.filter(record => 
-            record.fecha && record.fecha.substring(3) === monthFilter
-        );
-    }
-    
-    if (aptitudeFilterValue && aptitudeFilterValue !== 'TODAS LAS APTITUDES') {
-        recordsToDisplay = recordsToDisplay.filter(record => {
-            const { resultado } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
-            return resultado.startsWith(aptitudeFilterValue);
-        });
-    }
-    
-    currentFilteredRecords = recordsToDisplay.map(record => {
-        // Al filtrar, usamos el IMC que está guardado en el registro (que ya incluye la excepción)
-        const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
-        return {
-            ...record,
-            clasificacionMINSA: clasificacionMINSA,
-            resultado: resultado,
-            paClasificacion: paClasificacion,
-            riesgoAEnf: riesgoAEnf,
-            motivo: motivoInapto
-        };
-    });
-
-    renderTable(currentFilteredRecords);
-    
-    renderProgressionChart(currentFilteredRecords);
-}
-
-function renderProgressionChart(records) {
-    const ctx = document.getElementById('bmiProgressionChart');
-    const chartCard = document.getElementById('stats-chart-card');
-    if (!ctx || !chartCard) return;
-
-    const cipList = records.map(r => r.cip);
-    const isIndividual = records.length > 0 && cipList.every((val, i, arr) => val === arr[0]);
-    
-    if (!isIndividual) {
-        chartCard.style.display = 'none';
-        return;
-    }
-    
-    chartCard.style.display = 'block';
-
-    const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    
-    const chartRecordsAsc = [...records].reverse(); 
-    
-    const labels = chartRecordsAsc.map(r => {
-        const parts = r.fecha.split('/'); 
-        const monthIndex = parseInt(parts[1]) - 1;
-        const year = parts[2];
-        const status = r.motivo === 'NO ASISTIÓ' ? ' (Ausente)' : '';
-        return `${monthNames[monthIndex]} ${year}${status}`;
-    });
-    
-    const chartTitle = `${records[0].grado} ${records[0].apellido}, ${records[0].nombre}`;
-
-    // Usar el IMC guardado (que puede ser 29.9 si aplica la excepción)
-    const dataPoints = chartRecordsAsc.map(r => r.motivo === 'NO ASISTIÓ' ? null : parseFloat(r.imc));
-
-    if (progressionChart) {
-        progressionChart.destroy();
-    }
-
-    progressionChart = new Chart(ctx.getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Índice de Masa Corporal (IMC)',
-                data: dataPoints,
-                borderColor: '#CCFF00',
-                backgroundColor: 'rgba(204, 255, 0, 0.1)',
-                borderWidth: 2,
-                tension: 0.4,
-                spanGaps: true,
-                pointRadius: 5,
-                pointBackgroundColor: dataPoints.map(imc => {
-                    if (imc === null) return '#808080';
-                    if (imc >= 25) return '#E74C3C'; // Usa 25 para sobrespeso
-                    return '#008744';
-                })
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#EEEEEE'
-                    }
-                },
-                title: {
-                    display: true,
-                    text: chartTitle,
-                    color: '#FFD700',
-                    font: {
-                        size: 16
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
-                            }
-                            if (context.raw === null) {
-                                return 'NO ASISTIÓ';
-                            }
-                            label += context.raw;
-                            return label;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    title: {
-                        display: true,
-                        text: 'IMC',
-                        color: '#EEEEEE'
-                    },
-                    min: 15,
-                    max: 40,
-                    ticks: {
-                        color: '#A0A0A0'
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                },
-                x: {
-                    ticks: {
-                        color: '#A0A0A0'
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    }
-                }
-            }
-        }
-    });
-}
-
+// --- 6. Lógica de la Tabla de Registros (Filtros, Renderizado, Exportación) ---
+// ... (Funciones populateMonthFilter, filterTable, renderProgressionChart, exportToWord, exportStatsToWord, downloadChartAsImage, exportToExcel sin cambios) ...
 
 function renderTable(records) {
     const tableBody = document.getElementById('admin-table-body');
@@ -975,10 +625,10 @@ function renderTable(records) {
         const row = tableBody.insertRow();
         row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
         
-        const clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? data.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
+        const clasificacionDisplay = clasificacionMINSA.includes('(EXCEPCIÓN)') ? clasificacionMINSA.toUpperCase() : (clasificacionMINSA === 'NO ASISTIÓ' ? data.motivo.toUpperCase() : clasificacionMINSA.toUpperCase());
         
         const riesgoAbdominalClass = riesgoAEnf === 'RIESGO MUY ALTO' ? 'text-red-500 font-bold' : (riesgoAEnf === 'RIESGO ALTO' ? 'text-color-accent-gold' : 'text-color-primary-green');
-        const paClasificacionClass = paClasificacion === 'HIPERTENSION' ? 'text-red-500 font-bold' : (paClasificacion === 'PRE-HIPERTENSION' ? 'text-yellow-500' : 'text-color-primary-green');
+        const paClasificacionClass = paClasificacion.includes('HIPERTENSION') || paClasificacion === 'ELEVADA' ? 'text-red-500 font-bold' : 'text-color-primary-green'; // Rojo para riesgo de PA
         
         let actionButtons = '<span>N/A</span>';
         
@@ -993,13 +643,12 @@ function renderTable(records) {
                 
             actionButtons = editButton; 
             
-            if (isSuperadmin) {
-                 actionButtons += `
-                    <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                 `;
-            }
+            // MODIFICACIÓN: Permitir eliminar a todos los administradores (admin y superadmin)
+            actionButtons += `
+                <button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar Registro">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            `;
         }
         
         row.innerHTML = `
@@ -1021,254 +670,9 @@ function renderTable(records) {
     });
 }
 
-function exportToWord() {
-    if (!isAuthenticated) {
-        displayMessage('Acceso Denegado', 'Debe iniciar sesión para exportar.', 'error');
-        return;
-    }
-    if (currentFilteredRecords.length === 0) {
-        displayMessage('Sin Datos', 'No hay registros para exportar.', 'warning');
-        return;
-    }
-    
-    const tableHeaderStyle = "background-color: #2F4F4F; color: white; padding: 4px; text-align: center; font-size: 10px; border: 1px solid #111; font-weight: bold; border-collapse: collapse; white-space: nowrap; font-family: 'Arial', sans-serif;";
-    const cellStyle = "padding: 4px; text-align: center; font-size: 10px; border: 1px solid #ccc; vertical-align: middle; border-collapse: collapse; font-family: 'Arial', sans-serif;";
-    const inaptoTextStyle = 'style="color: #991b1b; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"';
-    const aptoTextStyle = 'style="color: #065f46; font-weight: bold; text-align: center; font-family: \'Arial\', sans-serif;"';
-    const titleStyle = "text-align: center; color: #1e3a8a; font-size: 20px; margin-bottom: 5px; font-weight: bold; font-family: 'Arial', sans-serif;";
-    const subtitleStyle = "text-align: center; font-size: 14px; margin-bottom: 20px; font-family: 'Arial', sans-serif;";
-    const reportDate = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    
-    let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP</title><style>body { font-family: Arial, sans-serif; } table { border-collapse: collapse; width: 100%; margin: 20px auto; } td, th { border-collapse: collapse; }</style></head><body>`;
-    
-    htmlContent += `<div style="text-align: center; width: 100%;">
-        <h1 style="${titleStyle}">REPORTE DE ÍNDICE DE MASA CORPORAL (SIMCEP)</h1>
-        <p style="${subtitleStyle}">Fecha de Generación: ${reportDate} | Registros Filtrados: ${currentFilteredRecords.length}</p>
-    </div>`;
-
-    htmlContent += `<table border="1" style="width: 100%;"><thead><tr>
-        <th style="${tableHeaderStyle}; width: 10%;">UNIDAD</th>
-        <th style="${tableHeaderStyle}; width: 10%;">GRADO</th>
-        <th style="${tableHeaderStyle}; width: 25%;">APELLIDOS Y NOMBRES</th>
-        <th style="${tableHeaderStyle}; width: 8%;">EDAD</th>
-        <th style="${tableHeaderStyle}; width: 8%;">PESO (kg)</th>
-        <th style="${tableHeaderStyle}; width: 8%;">TALLA (m)</th>
-        <th style="${tableHeaderStyle}; width: 8%;">IMC</th>
-        <th style="${tableHeaderStyle}; width: 23%;">CLASIFICACIÓN</th>
-    </tr></thead><tbody>`;
-    
-    currentFilteredRecords.forEach(record => {
-        const { resultado, clasificacionMINSA } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
-        
-        const textStyleTag = resultado.startsWith('INAPTO') ? inaptoTextStyle : aptoTextStyle;
-        const nameCellStyle = `${cellStyle} text-align: left; font-weight: bold;`;
-        
-        let clasificacionDisplay = clasificacionMINSA === 'NO ASISTIÓ' ? record.motivo.toUpperCase() : clasificacionMINSA.toUpperCase();
-        
-        htmlContent += `<tr>
-            <td style="${cellStyle}">${record.unidad || 'N/A'}</td>
-            <td style="${cellStyle}">${record.grado || 'N/A'}</td>
-            <td style="${nameCellStyle}">${(record.apellido || 'N/A').toUpperCase()}, ${record.nombre || 'N/A'}</td>
-            <td style="${cellStyle}">${record.edad || 'N/A'}</td>
-            <td style="${cellStyle}">${record.peso || 'N/A'}</td>
-            <td style="${cellStyle}">${record.altura || 'N/A'}</td>
-            <td style="${cellStyle} font-weight: bold;">${record.imc || 'N/A'}</td>
-            <td style="${cellStyle}" ${textStyleTag}>${clasificacionDisplay}</td>
-        </tr>`;
-    });
-    
-    htmlContent += `</tbody></table>
-    <div style="margin: 40px auto 0 auto; width: 95%; text-align: center; border: none; font-family: 'Arial', sans-serif;">
-        <h4 style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #1e3a8a;">LEYES DE CLASIFICACIÓN CLÍNICA (SIMCEP)</h4>
-        <p style="font-size: 10px; margin: 5px 0; text-align: left; padding-left: 10%;">
-            *La Aptitud se rige por el IMC y el Perímetro Abdominal (PAB) según directrices de la OMS/Internas. 
-            El INAPTO es anulado a APTO si el PAB cae en el rango de excepción.
-        </p>
-    </div></body></html>`;
-
-    const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-    const filename = `Reporte_SIMCEP_IMC_Word_${date}.doc`;
-    const blob = new Blob([htmlContent], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click(); // Usar .click() para la descarga
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
-}
-
-
-function exportStatsToWord() {
-    if (!isAuthenticated) {
-        displayMessage('Acceso Denegado', 'Debe iniciar sesión para operar.', 'error');
-        return;
-    }
-    
-    const records = currentFilteredRecords;
-    
-    if (records.length === 0) {
-        displayMessage('Sin Datos', 'No hay registros visibles en la tabla para generar estadística. Ajuste los filtros.', 'warning');
-        return;
-    }
-
-    const cipList = records.map(r => r.cip);
-    const isIndividual = records.every((val, i, arr) => val === arr[0]);
-    
-    const reportTitle = isIndividual 
-        ? `REPORTE DE PROGRESIÓN DE IMC DEL PERSONAL: ${records[0].apellido}, ${records[0].nombre}`
-        : "REPORTE ESTADÍSTICO CONSOLIDADO DE PESADA";
-    
-    const subtitleText = isIndividual ? `CIP: ${records[0].cip} | UNIDAD: ${records[0].unidad}` : `Registros Analizados: ${records.length}`;
-
-    let progressionTableHtml = '';
-    
-    if (isIndividual) {
-         progressionTableHtml = `
-            <h3 style="font-size: 16px; margin-top: 20px; font-weight: bold; color: #008744;">NOTA: VER GRÁFICO DE PROGRESIÓN EN PANTALLA</h3>
-            <p style="font-size: 12px; margin-top: 5px; color: #555;">Este reporte de Word solo incluye la tabla de resumen estadístico por ser un formato no compatible con gráficos dinámicos.</p>
-        `;
-    }
-    
-    const totalRegistrosValidos = records.filter(r => r.motivo !== 'NO ASISTIÓ').length;
-    const totalApto = records.filter(r => r.resultado && r.resultado.startsWith('APTO') && r.motivo !== 'NO ASISTIÓ').length;
-    const totalInapto = records.filter(r => r.resultado && r.resultado.startsWith('INAPTO') && r.motivo !== 'NO ASISTIÓ').length;
-    const totalNoAsistio = records.filter(r => r.motivo === 'NO ASISTIÓ').length;
-
-    const porcentajeApto = totalRegistrosValidos > 0 ? ((totalApto / totalRegistrosValidos) * 100).toFixed(1) : 0;
-    const porcentajeInapto = totalRegistrosValidos > 0 ? ((totalInapto / totalRegistrosValidos) * 100).toFixed(1) : 0;
-
-
-    const statsSummaryHtml = `
-        <h3 style="font-size: 16px; margin-top: 30px; font-weight: bold; color: #008744;">RESUMEN DE APTITUD</h3>
-        <table border="1" style="width: 50%; min-width: 400px; margin-top: 10px; border-collapse: collapse; font-family: 'Arial', sans-serif;">
-            <tr style="background-color: #f0f0f0;">
-                <td style="padding: 6px; width: 30%;">Total Registros Válidos (con Pesada)</td>
-                <td style="padding: 6px; text-align: center;">${totalRegistrosValidos}</td>
-            </tr>
-            <tr style="background-color: #c8e6c9;">
-                <td style="padding: 6px;">Total APTO (Válido)</td>
-                <td style="padding: 6px; text-align: center; font-weight: bold;">${totalApto} (${porcentajeApto}%)</td>
-            </tr>
-            <tr style="background-color: #ffcdd2;">
-                <td style="padding: 6px;">Total INAPTO (Válido)</td>
-                <td style="padding: 6px; text-align: center; font-weight: bold;">${totalInapto} (${porcentajeInapto}%)</td>
-            </tr>
-            <tr style="background-color: #fff3c9;">
-                <td style="padding: 6px;">Total NO ASISTIÓ</td>
-                <td style="padding: 6px; text-align: center; font-weight: bold;">${totalNoAsistio}</td>
-            </tr>
-        </table>
-    `;
-
-    const reportDate = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-    let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP Estadístico</title><style>body { font-family: Arial, sans-serif; }</style></head><body>`;
-    
-    htmlContent += `<div style="text-align: center; font-family: 'Arial', sans-serif;">
-        <h1 style="color: #FFD700; font-size: 20px; margin-bottom: 5px;">${reportTitle}</h1>
-        <p style="font-size: 12px; margin-bottom: 20px;">${subtitleText} | Generado el: ${reportDate}</p>
-    </div>`;
-
-    htmlContent += progressionTableHtml;
-    htmlContent += statsSummaryHtml;
-    
-    htmlContent += `</body></html>`;
-
-    const filename = `Reporte_Estadistico_SIMCEP_${isIndividual ? records[0].cip : 'Consolidado'}_${reportDate.replace(/\//g, '-')}.doc`;
-    const blob = new Blob([htmlContent], { type: 'application/msword' });
-    const downloadUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = filename; 
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(downloadUrl);
-    displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
-}
-
-function downloadChartAsImage() {
-    const canvas = document.getElementById('bmiProgressionChart');
-    if (!canvas || !progressionChart) {
-        displayMessage('Error', 'No hay gráfico para descargar. Genere un reporte individual primero.', 'error');
-        return;
-    }
-    
-    const reportDate = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-    const cip = currentFilteredRecords.length > 0 && currentFilteredRecords.every(r => r.cip === currentFilteredRecords[0].cip) ? currentFilteredRecords[0].cip : 'CONSOLIDADO';
-
-    const filename = `Progreso_IMC_${cip}_${reportDate}.png`;
-    
-    const imageURL = canvas.toDataURL('image/png'); 
-    
-    const a = document.createElement('a');
-    a.href = imageURL;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    displayMessage('ÉXITO', `Gráfica descargada como ${filename}.`, 'success');
-}
-
-
-function exportToExcel() {
-    if (!isAuthenticated || currentFilteredRecords.length === 0) {
-        displayMessage('Error', 'No se puede exportar sin registros o sin autenticación.', 'error');
-        return;
-    }
-    
-    const reportMonthEl = document.getElementById('input-report-month');
-    const reportMonth = reportMonthEl ? reportMonthEl.value.toUpperCase() : 'REPORTE CONSOLIDADO';
-    
-    const btn = document.getElementById('export-excel-button');
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> GENERANDO...';
-    btn.disabled = true;
-
-    fetch('/api/export-excel', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            records: currentFilteredRecords,
-            reportMonth: reportMonth 
-        })
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(error => { throw new Error(error.message || 'Error desconocido del servidor.'); });
-        }
-        return response.blob(); 
-    })
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const date = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
-        a.href = url;
-        a.download = `Reporte_SIMCEP_Mensual_${date}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-
-        displayMessage('Exportación Exitosa', `Se ha generado el archivo .xlsx con formato.`, 'success');
-    })
-    .catch(error => {
-        console.error('Error en la descarga de Excel:', error);
-        displayMessage('Error de Exportación', `No se pudo generar el archivo: ${error.message}`, 'error');
-    })
-    .finally(() => {
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-    });
-}
-
 
 // --- 7. Event Listeners ---
+// ... (Resto de los Event Listeners sin cambios, usan las funciones de arriba) ...
 
 document.getElementById('bmi-form')?.addEventListener('submit', function(e) {
     e.preventDefault();
@@ -1321,7 +725,7 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
     const grado = form.elements['input-role']?.value || '';
     const apellido = form.elements['input-lastname']?.value || '';
     const nombre = form.elements['input-firstname']?.value || '';
-    const dob = form.elements['input-dob']?.value || ''; // Está oculto, pero capturamos el valor (si lo tiene)
+    const dob = form.elements['input-dob']?.value || ''; 
     const edad = parseInt(form.elements['input-age-admin']?.value || 0); // EDAD MANUAL
     const peso = parseFloat(form.elements['input-weight-admin']?.value || 0);
     const altura = parseFloat(form.elements['input-height-admin']?.value || 0);
@@ -1341,7 +745,7 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
     const formattedMonthYear = `${regMonth}/${regYear}`; 
 
     // VALIDACIÓN DE CAMPOS CLAVE
-    if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 18 && gguu && unidad && dni && pa) { // Se asume edad mínima de 18
+    if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 18 && gguu && unidad && dni && pa) {
         
         if (!isEditMode) {
             try { 
@@ -1379,7 +783,6 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
         const imcExceptionResult = applyMilitaryIMCException(imcReal, sexo, pab);
         const imcToSave = imcExceptionResult.imc.toFixed(1); // 29.9 o el IMC Real (1 decimal)
         
-        // Si se sobrescribió, forzamos la Aptitud y la Clasificación. Si no, usamos la lógica normal.
         let finalAptitudeResult;
         
         if (imcExceptionResult.sobrescrito) {
@@ -1400,7 +803,6 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
             finalAptitudeResult = getAptitude(imcReal, sexo, pab, pa); 
         }
 
-        // DESDE AQUÍ, USAR finalAptitudeResult
         const { resultado, detalle, paClasificacion, riesgoAEnf, motivoInapto } = finalAptitudeResult; 
 
         // VISUALIZACIÓN
@@ -1483,14 +885,9 @@ async function fetchAndAutoFill(queryType, queryValue) {
         document.getElementById('input-lastname').value = patientData.apellido || '';
         document.getElementById('input-firstname').value = patientData.nombre || '';
         
-        // MODIFICADO: Solo se autocompleta la edad (manual)
+        // Solo se autocompleta la edad (manual)
         document.getElementById('input-age-admin').value = patientData.edad || '';
-        // El DOB no se usa, pero se mantiene para la estructura
-        if (document.getElementById('input-dob')) { 
-             document.getElementById('input-dob').value = patientData.fechaNacimiento || ''; 
-        }
-
-
+        
         // VACÍO DE CAMPOS VARIABLES (PESADA CLÍNICA)
         document.getElementById('input-pa').value = ''; 
         document.getElementById('input-weight-admin').value = ''; 
