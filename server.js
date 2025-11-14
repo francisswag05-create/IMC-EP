@@ -1,4 +1,4 @@
-// server.js (Versión Final y Verificada para PostgreSQL en Railway)
+// server.js (Versión Final con Corrección de Actualización de Usuario)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -22,7 +22,6 @@ app.use(express.static(path.join(__dirname, '/')));
 // --- 3. CONEXIÓN A LA BASE DE DATOS POSTGRESQL (Railway) ---
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL, 
-    // Usar ssl: { rejectUnauthorized: false } para conexiones seguras desde Node a Railway
     ssl: { rejectUnauthorized: false } 
 });
 
@@ -36,7 +35,6 @@ function dbQueryPromise(sql, params = []) {
         .then(res => res.rows)
         .catch(err => {
             console.error("Error en consulta DB:", err.message);
-            // Re-lanzar el error para que sea capturado por la ruta
             throw err;
         });
 }
@@ -46,7 +44,6 @@ async function initializeDatabase() {
     console.log("Intentando conectar a la base de datos PostgreSQL de Railway...");
     const client = await pool.connect();
     try {
-        // Ejecución de la creación de tablas (Postgres usa SERIAL PRIMARY KEY y tipos específicos)
         
         // COMANDO 1: Crear la tabla USERS
         await client.query(`
@@ -57,7 +54,6 @@ async function initializeDatabase() {
                 role VARCHAR(50) NOT NULL,
                 email VARCHAR(255) UNIQUE,
                 resetPasswordToken VARCHAR(255),
-                -- Usar BIGINT para almacenar la marca de tiempo de expiración
                 resetPasswordExpires BIGINT 
             );
         `);
@@ -95,17 +91,19 @@ async function initializeDatabase() {
         const defaultPassword = 'superadmin'; 
         const hash = await bcrypt.hash(defaultPassword, 10);
 
-        // INSERT OR IGNORE en Postgres se hace con ON CONFLICT
+        // NOTA: Usamos ON CONFLICT DO UPDATE en este caso para asegurar que si se reinicia, 
+        // el nombre de SUPERADMIN no se pierda si lo borraron y lo vuelven a intentar crear
         const insertUserSql = `INSERT INTO users (cip, fullName, password, role, email) 
                                VALUES ($1, $2, $3, $4, $5) 
-                               ON CONFLICT (cip) DO NOTHING;`;
+                               ON CONFLICT (cip) 
+                               DO UPDATE SET fullName = EXCLUDED.fullName;`;
         
         const result = await client.query(insertUserSql, 
             ['ADMIN001', 'Super Administrador SIMCEP', hash, 'superadmin', 'admin@simcep.com']
         );
         
         if (result.rowCount > 0) {
-            console.log("✅ Usuario Super Admin Inicial creado (CIP: ADMIN001 | CLAVE: superadmin)");
+            console.log("✅ Usuario Super Admin Inicial verificado/creado (CIP: ADMIN001 | CLAVE: superadmin)");
         }
         // *** FIN DEL CÓDIGO TEMPORAL ***
         
@@ -564,22 +562,38 @@ app.post('/api/users', (req, res) => {
     bcrypt.hash(password, 10, (err, hash) => {
         if (err) return res.status(500).json({ message: "Error al encriptar." });
         
-        const sql = "INSERT INTO users (cip, fullName, password, role, email) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (cip) DO NOTHING RETURNING cip";
+        // *** CAMBIO CRÍTICO: Usar ON CONFLICT DO UPDATE SET ***
+        // Esto permite actualizar el fullName y email si el CIP ya existe, en lugar de ignorar la solicitud.
+        const sql = `INSERT INTO users (cip, fullName, password, role, email) 
+                     VALUES ($1, $2, $3, $4, $5) 
+                     ON CONFLICT (cip) 
+                     DO UPDATE SET 
+                        fullName = EXCLUDED.fullName, 
+                        email = EXCLUDED.email
+                     RETURNING cip`;
+        
         const values = [cip, fullName, hash, 'admin', email || null];
 
         pool.query(sql, values)
             .then(result => {
-                if (result.rowCount === 0) return res.status(409).json({ message: `El CIP ya está registrado.` });
-                res.status(201).json({ message: "Usuario creado.", cip: cip });
+                // Verificar si fue una inserción (rowCount = 1) o una actualización (rowCount = 1 y el CIP ya existía)
+                if (result.rowCount === 0) {
+                    // Esto solo debería pasar si la consulta falla de otra manera, ya que DO UPDATE asegura rowCount > 0
+                    return res.status(409).json({ message: `El CIP ya está registrado y no se pudo actualizar.` });
+                }
+                
+                // Si la consulta fue exitosa (insert o update), devolvemos 201/200
+                res.status(201).json({ message: "Usuario creado/actualizado correctamente.", cip: cip });
             })
             .catch(err => {
-                if (err.code === '23505') { // Código de error UNIQUE violation en Postgres
+                if (err.code === '23505') { // Código de error UNIQUE violation en Postgres (solo para el email, ya que el CIP es el conflicto principal)
                     return res.status(409).json({ message: `El CIP o Email ya está registrado.` });
                 }
                 return res.status(500).json({ error: err.message });
             });
     });
 });
+// ... (resto de las rutas: DELETE /api/users/:cip, /api/forgot-password, /api/reset-password) ...
 
 // [DELETE] /api/users/:cip (Postgres)
 app.delete('/api/users/:cip', (req, res) => {
@@ -588,7 +602,6 @@ app.delete('/api/users/:cip', (req, res) => {
     pool.query(sql, [cip])
         .then(result => {
             if (result.rowCount === 0) return res.status(404).json({ message: "Usuario no encontrado." });
-            // Este mensaje de error estaba incorrecto, usa 'Usuario' en lugar de 'Registro'
             res.json({ message: `Usuario con CIP ${cip} eliminado.` }); 
         })
         .catch(err => res.status(500).json({ error: err.message }));
