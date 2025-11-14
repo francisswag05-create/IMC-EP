@@ -231,10 +231,10 @@
                                 <option value="Femenino">Femenino</option>
                             </select>
                         </div>
-                        <!-- NUEVO CAMPO: FECHA DE NACIMIENTO (DOB) -->
-                        <div> 
+                        <!-- MODIFICACIÓN: Ocultamos Fecha de Nacimiento para cumplir con la directiva temporal -->
+                        <div class="hidden"> 
                             <label for="input-dob" class="label-tech">FECHA DE NACIMIENTO</label>
-                            <input type="date" id="input-dob" class="input-tech" required> 
+                            <input type="date" id="input-dob" class="input-tech"> 
                         </div>
                         <div>
                             <label for="input-pa" class="label-tech">PA (Presión Arterial)</label>
@@ -252,8 +252,9 @@
                             <label for="input-firstname" class="label-tech">NOMBRES</label>
                             <input type="text" id="input-firstname" placeholder="Ej: Marco Antonio" class="input-tech" required>
                         </div>
+                        <!-- MODIFICACIÓN: Hacemos EDAD un campo de entrada manual requerido -->
                         <div>
-                            <label for="input-age-admin" class="label-tech">EDAD (Autocompletado)</label>
+                            <label for="input-age-admin" class="label-tech">EDAD</label>
                             <input type="number" id="input-age-admin" placeholder="Ej: 35" min="18" max="100" class="input-tech" required>
                         </div>
                         <div>
@@ -280,9 +281,13 @@
                         </div>
                         <!-- Fin Nuevo Campo -->
                         
-                        <div></div> <!-- Espacio vacío para mantener la columna -->
+                        <!-- Botón de Cancelar Edición (Añadido previamente) -->
+                        <button type="button" id="cancel-edit-button" class="btn-primary-tech btn-logout w-full mt-6 hidden">
+                            <i class="fas fa-times mr-2"></i> CANCELAR EDICIÓN
+                        </button>
                     </div>
                     
+                    <!-- El botón de submit se mantiene al final del formulario -->
                     <button type="submit" class="btn-primary-tech btn-calculate w-full mt-6">
                         <i class="fas fa-database mr-2"></i> GUARDAR Y CALCULAR APTITUD
                     </button>

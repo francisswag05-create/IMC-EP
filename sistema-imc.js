@@ -38,11 +38,11 @@ function displayMessage(title, text, type) {
 }
 
 
-// --- FUNCIONES PARA GESTIÓN DE USUARIOS (CORREGIDA: SOLUCIONA EL 'undefined') ---
+// --- FUNCIONES PARA GESTIÓN DE USUARIOS ---
 
 async function fetchAndDisplayUsers() {
     const tableBody = document.getElementById('users-table-body');
-    if (!tableBody) return; // Salir si no estamos en la vista de administración
+    if (!tableBody) return; 
 
     try {
         const response = await fetch('/api/users');
@@ -57,8 +57,7 @@ async function fetchAndDisplayUsers() {
         }
 
         users.forEach(user => {
-            // *** CORRECCIÓN: Si el nombre es NULL/vacio, usamos solo el rol ***
-            let userFullNameDisplay = user.fullName || ''; // Si es nulo, es una cadena vacía
+            let userFullNameDisplay = user.fullName || ''; 
             let roleDisplay = '';
 
             if (user.role === 'admin') {
@@ -67,11 +66,7 @@ async function fetchAndDisplayUsers() {
                 roleDisplay = `(SUPERADMIN)`;
             }
             
-            // Si el nombre está vacío, solo mostramos el rol. Si existe, mostramos Nombre + Rol.
-            // Usamos .trim() para evitar que se muestre un espacio extra si user.fullName es una cadena vacía.
             let finalDisplay = userFullNameDisplay.trim() ? `${userFullNameDisplay} ${roleDisplay}` : roleDisplay;
-
-            // *** FIN DE CORRECCIÓN ***
 
             const row = tableBody.insertRow();
             row.innerHTML = `
@@ -179,7 +174,7 @@ async function updateUI() {
     const monitoringTextEl = document.getElementById('monitoring-status-text');
     const userManagementSection = document.getElementById('user-management-section');
 
-    if (!publicView || !adminView || !userInfo) return; // Salir si no estamos en la página principal
+    if (!publicView || !adminView || !userInfo) return; 
 
     if (isAuthenticated) {
         publicView.classList.add('hidden-view');
@@ -203,7 +198,6 @@ async function updateUI() {
         }
         
         updateAdminTableHeaders();
-        // Llamar a la función de carga de registros
         await fetchAndDisplayRecords(); 
         
         if (currentUserRole === 'superadmin') {
@@ -236,7 +230,6 @@ async function updateUI() {
 function updateAdminTableHeaders() {
     const tableHeaderRow = document.querySelector('#admin-dashboard-view thead tr');
     if (tableHeaderRow) {
-        // AJUSTADO A 12 COLUMNAS (AÑADIDA CLASIFICACIÓN IMC)
         tableHeaderRow.innerHTML = `
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">CIP</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-color-accent-lime">GRADO</th>
@@ -260,6 +253,22 @@ function getSimplifiedAptitudeStyle(resultado) {
     return 'bg-green-700 text-white'; 
 }
 
+// Función que aplica la lógica de colores de la caja de resultados (Del pulido anterior)
+function getAptitudeUI(resultado) {
+    if (resultado.startsWith('INAPTO')) {
+        return {
+            badgeClass: 'bg-red-700 text-white',
+            boxBorderClass: 'border-l-4 border-red-600 bg-red-900/10',
+            boxColor: 'text-red-500' 
+        };
+    }
+    // Para APTO y APTO (EXCEPCIÓN PAB)
+    return { 
+        badgeClass: 'bg-green-700 text-white',
+        boxBorderClass: 'border-l-4 border-color-accent-lime bg-color-green-darker',
+        boxColor: 'text-color-accent-lime'
+    }; 
+}
 
 // --- 3. Funciones de Cálculo de IMC y Clasificación (MODIFICADA) ---
 
@@ -271,8 +280,8 @@ function calculateIMC(weight, height) {
     return 0; 
 }
 
-// NUEVA FUNCIÓN PARA CALCULAR EDAD A PARTIR DE DOB
-function calculateAge(dateOfBirth) {
+// Se mantiene la función, pero NO se llama en el formulario de Admin
+function calculateAge(dateOfBirth) { 
     if (!dateOfBirth) return 0;
     const dob = new Date(dateOfBirth);
     const today = new Date();
@@ -321,14 +330,55 @@ function getRiskByWaist(sexo, pab) {
     return 'INDETERMINADO'; 
 }
 
+// ***************************************************************
+// *** FUNCIÓN CLAVE: SOBRESCRITURA DE IMC (DIRECTIVA MILITAR) ***
+// ***************************************************************
+function applyMilitaryIMCException(imcReal, sexo, pab) {
+    const imcFloat = parseFloat(imcReal);
+    const pabFloat = parseFloat(pab);
+    
+    let sobrescribeIMC = false;
+
+    // Regla: IMC > 29.9 (es decir, Obesidad I o superior)
+    if (imcFloat > 29.9) { 
+        
+        // Excepción HOMBRE: PAB < 94 cm
+        if (sexo === 'Masculino' && pabFloat < 94) {
+            sobrescribeIMC = true;
+        }
+        // Excepción MUJER: PAB < 84 cm (Directiva del Doctor)
+        else if (sexo === 'Femenino' && pabFloat < 84) { 
+            sobrescribeIMC = true;
+        }
+    }
+    
+    // Aplicar la corrección
+    if (sobrescribeIMC) {
+        return { 
+            imc: 29.9, // Valor sobrescrito (29.9)
+            sobrescrito: true,
+            motivo: "APTO (EXCEPCIÓN MASA MUSCULAR)"
+        };
+    }
+    
+    // Si no aplica, devuelve el valor real
+    return {
+        imc: imcFloat, // Valor Real
+        sobrescrito: false,
+        motivo: ""
+    };
+}
+
 
 // --- Función getAptitude (SIMPLIFICADA: SOLO APTO/INAPTO + REGLAS DE EXCEPCIÓN) ---
+// NOTA: Esta función se mantiene con el IMC real para la calculadora pública,
+// pero el listener del Admin la sobrescribe si aplica la excepción.
 function getAptitude(imc, sexo, pab, paString) {
     const imcFloat = parseFloat(imc);
     const pabFloat = parseFloat(pab); 
     let clasificacionMINSA, resultado, detalle;
     
-    // *** MODIFICACIÓN PRINCIPAL: Manejo de NO ASISTIÓ/Registro Vacío ***
+    // *** Manejo de NO ASISTIÓ/Registro Vacío ***
     if (imcFloat === 0 && pabFloat === 0 && paString === 'N/A') {
         clasificacionMINSA = "NO ASISTIÓ";
         resultado = "INAPTO (NO ASISTIÓ)";
@@ -344,7 +394,7 @@ function getAptitude(imc, sexo, pab, paString) {
         };
     }
     
-    // 1. Clasificación MINSA (Clasificación de IMC - FIEL A LA TABLA OMS)
+    // 1. Clasificación MINSA (Clasificación de IMC)
     if (imcFloat < 18.5) clasificacionMINSA = "BAJO PESO";
     else if (imcFloat <= 24.9) clasificacionMINSA = "NORMAL";
     else if (imcFloat <= 29.9) clasificacionMINSA = "SOBREPESO";
@@ -380,15 +430,12 @@ function getAptitude(imc, sexo, pab, paString) {
     // 5. REGLA DE EXCEPCIÓN DEL CENTRO MÉDICO (LA REGLA DEL PAB ANULADOR)
     let aplicaExcepcion = false;
     let umbralExcepcion;
-
-    if (sexo === 'Masculino') {
-        umbralExcepcion = 94;
-        if (pabFloat < 94) { // PAB < 94 -> APTO
+    
+    // La regla de anulación es: Si es INAPTO y PAB está en RIESGO BAJO (PAB < 94 H, PAB < 80 M)
+    if (!esAptoInicial) {
+        if (sexo === 'Masculino' && pabFloat < 94) {
             aplicaExcepcion = true;
-        }
-    } else { // Femenino
-        umbralExcepcion = 80;
-        if (pabFloat < 80) { // PAB < 80 -> APTO
+        } else if (sexo === 'Femenino' && pabFloat < 80) { // Ojo: Aquí se usa 80, no 84, para la anulación general.
             aplicaExcepcion = true;
         }
     }
@@ -423,6 +470,7 @@ function getAptitude(imc, sexo, pab, paString) {
 
 
 // --- 4. Funciones de Autenticación y Administración ---
+// ... (Funciones attemptAdminLogin, logoutAdmin, handleForgotPassword, updateUserPassword, etc. sin cambios) ...
 
 async function attemptAdminLogin() {
     const username = document.getElementById('admin-username').value;
@@ -463,8 +511,6 @@ function logoutAdmin() {
     if (adminResultBox) adminResultBox.classList.add('hidden');
     updateUI();
 }
-
-// --- FUNCIONES PARA RECUPERACIÓN DE CONTRASEÑA ---
 
 async function handleForgotPassword() {
     const cip = prompt("Por favor, ingrese su CIP para iniciar el proceso de recuperación de contraseña:");
@@ -509,8 +555,7 @@ async function handleForgotPassword() {
     }
 }
 
-
-// --- 5. Funciones CRUD para Registros de IMC ---
+// ... (Funciones fetchAndDisplayRecords, saveRecord, deleteRecord, etc. sin cambios) ...
 
 async function fetchAndDisplayRecords() {
     try {
@@ -518,10 +563,8 @@ async function fetchAndDisplayRecords() {
         if (!response.ok) throw new Error('Error al obtener los registros del servidor.');
         allRecordsFromDB = await response.json();
         
-        // ** CORRECCIÓN: La función `populateMonthFilter` ahora establecerá el filtro por defecto. **
         populateMonthFilter();
         
-        // Aplicar los filtros para llenar la tabla.
         filterTable();
         
     } catch (error) {
@@ -559,7 +602,6 @@ async function saveRecord(record) {
             if (adminResultBox) adminResultBox.classList.add('hidden');
         }, 5000);
         
-        // ** CORRECCIÓN: Volver a cargar y filtrar la tabla **
         await fetchAndDisplayRecords(); 
         
     } catch (error) {
@@ -604,8 +646,8 @@ function handleEditRecord(id) {
     form.elements['input-role'].value = recordToEdit.grado;
     form.elements['input-lastname'].value = recordToEdit.apellido;
     form.elements['input-firstname'].value = recordToEdit.nombre;
-    form.elements['input-dob'].value = recordToEdit.dob || ''; 
-    form.elements['input-age-admin'].value = recordToEdit.edad;
+    // MODIFICADO: DOB no se carga, EDAD se carga directamente
+    form.elements['input-age-admin'].value = recordToEdit.edad; 
     
     // CARGAR CAMPOS DE PESADA
     form.elements['input-pa'].value = recordToEdit.pa || '';
@@ -623,10 +665,17 @@ function handleEditRecord(id) {
 
     // FORZAR RECALCULO Y VISUALIZACIÓN al abrir el formulario (SOLUCIÓN UX)
     const imc = calculateIMC(recordToEdit.peso, recordToEdit.altura);
-    const { resultado, detalle } = getAptitude(imc, recordToEdit.sexo, recordToEdit.pab, recordToEdit.pa);
+    
+    // Aplicar la regla de excepción si aplica (aunque solo debería ser relevante al guardar)
+    const imcExceptionResult = applyMilitaryIMCException(imc, recordToEdit.sexo, recordToEdit.pab);
+    const imcToDisplay = imcExceptionResult.imc.toFixed(1); 
+    
+    // Usar el IMC corregido para la clasificación en la vista de edición
+    const { resultado, detalle } = getAptitude(imcToDisplay, recordToEdit.sexo, recordToEdit.pab, recordToEdit.pa);
+
     const badgeClass = getSimplifiedAptitudeStyle(resultado);
 
-    document.getElementById('admin-bmi-value').textContent = imc;
+    document.getElementById('admin-bmi-value').textContent = imcToDisplay; // Mostrar el IMC corregido
     document.getElementById('admin-aptitude-badge').textContent = resultado;
     document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
     document.getElementById('admin-aptitude-detail').textContent = detalle;
@@ -636,6 +685,9 @@ function handleEditRecord(id) {
     const submitButton = document.querySelector('#admin-record-form button[type="submit"]');
     submitButton.innerHTML = '<i class="fas fa-save mr-2"></i> ACTUALIZAR REGISTRO';
     document.querySelector('#admin-record-form h3').innerHTML = '<i class="fas fa-pencil-alt mr-2 text-color-accent-lime"></i> EDITANDO REGISTRO DE PERSONAL';
+
+    // MOSTRAR BOTÓN DE CANCELAR EDICIÓN (Implementado en el pulido anterior)
+    document.getElementById('cancel-edit-button').style.display = 'block';
 
     isEditMode = true;
     currentEditingRecordId = id;
@@ -651,6 +703,9 @@ function cancelEdit() {
     submitButton.innerHTML = '<i class="fas fa-database mr-2"></i> GUARDAR Y CALCULAR APTITUD';
     document.querySelector('#admin-record-form h3').innerHTML = '<i class="fas fa-user-plus mr-2 text-color-accent-lime"></i> REGISTRO DE NUEVO PERSONAL';
     
+    // OCULTAR BOTÓN DE CANCELAR EDICIÓN
+    document.getElementById('cancel-edit-button').style.display = 'none';
+
     // Restablecer el campo de mes de registro al mes actual
     const now = new Date();
     const year = now.getFullYear();
@@ -684,6 +739,8 @@ async function updateRecord(id, recordData) {
     }
 }
 
+// ... (Funciones populateMonthFilter, filterTable, renderProgressionChart, renderTable, exportToWord, exportStatsToWord, downloadChartAsImage, exportToExcel sin cambios) ...
+
 function populateMonthFilter() {
     const filterSelect = document.getElementById('month-filter');
     if (!filterSelect) return; 
@@ -696,7 +753,6 @@ function populateMonthFilter() {
         return acc;
     }, {});
     
-    // ** CORRECCIÓN: Asegurar que "Todos los Meses" sea la primera opción (value="") **
     filterSelect.innerHTML = `<option value="">Todos los Meses (${allRecordsFromDB.length} Registros)</option>`;
     
     Object.keys(monthCounts).sort((a, b) => {
@@ -714,8 +770,6 @@ function populateMonthFilter() {
         filterSelect.appendChild(option);
     });
     
-    // ** CORRECCIÓN: NO FORZAR EL MES ACTUAL AQUÍ. El DOMContentLoaded se encargará del estado inicial. **
-    // Si el filtro ya tiene un valor (ej: después de un filterTable), mantenerlo. Si no, se queda en "" (Todos los Meses).
     const currentFilterValue = filterSelect.getAttribute('data-current-value') || "";
     if (currentFilterValue) {
         filterSelect.value = currentFilterValue;
@@ -724,41 +778,34 @@ function populateMonthFilter() {
     }
 }
 
-// --- 6. Lógica de la Tabla de Registros (Filtros, Renderizado, Exportación) ---
-
 function filterTable() {
     const nameSearchTerm = document.getElementById('name-filter').value.toLowerCase().trim();
     const ageFilterValue = document.getElementById('age-filter').value;
     const monthFilter = document.getElementById('month-filter').value; // value="" para "Todos los Meses"
     const aptitudeFilterValue = (document.getElementById('aptitude-filter').value || '').toUpperCase(); 
 
-    // Guardar el valor actual del filtro para persistencia al recargar
     document.getElementById('month-filter').setAttribute('data-current-value', monthFilter);
 
 
     let recordsToDisplay = allRecordsFromDB;
     
-    // Aplicar Filtro de Nombre
     if (nameSearchTerm) {
         recordsToDisplay = recordsToDisplay.filter(record => 
             `${record.apellido} ${record.nombre}`.toLowerCase().includes(nameSearchTerm)
         );
     }
     
-    // Aplicar Filtro de Edad
     if (ageFilterValue && !isNaN(parseInt(ageFilterValue))) {
         const ageToMatch = parseInt(ageFilterValue);
         recordsToDisplay = recordsToDisplay.filter(record => record.edad === ageToMatch);
     }
     
-    // Aplicar Filtro de Mes (SOLO si no es la cadena vacía)
     if (monthFilter) { 
         recordsToDisplay = recordsToDisplay.filter(record => 
             record.fecha && record.fecha.substring(3) === monthFilter
         );
     }
     
-    // Aplicar Filtro de Aptitud
     if (aptitudeFilterValue && aptitudeFilterValue !== 'TODAS LAS APTITUDES') {
         recordsToDisplay = recordsToDisplay.filter(record => {
             const { resultado } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
@@ -767,6 +814,7 @@ function filterTable() {
     }
     
     currentFilteredRecords = recordsToDisplay.map(record => {
+        // Al filtrar, usamos el IMC que está guardado en el registro (que ya incluye la excepción)
         const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
         return {
             ...record,
@@ -782,7 +830,6 @@ function filterTable() {
     
     renderProgressionChart(currentFilteredRecords);
 }
-
 
 function renderProgressionChart(records) {
     const ctx = document.getElementById('bmiProgressionChart');
@@ -813,6 +860,7 @@ function renderProgressionChart(records) {
     
     const chartTitle = `${records[0].grado} ${records[0].apellido}, ${records[0].nombre}`;
 
+    // Usar el IMC guardado (que puede ser 29.9 si aplica la excepción)
     const dataPoints = chartRecordsAsc.map(r => r.motivo === 'NO ASISTIÓ' ? null : parseFloat(r.imc));
 
     if (progressionChart) {
@@ -834,7 +882,7 @@ function renderProgressionChart(records) {
                 pointRadius: 5,
                 pointBackgroundColor: dataPoints.map(imc => {
                     if (imc === null) return '#808080';
-                    if (imc >= 25) return '#E74C3C';
+                    if (imc >= 25) return '#E74C3C'; // Usa 25 para sobrespeso
                     return '#008744';
                 })
             }]
@@ -919,6 +967,7 @@ function renderTable(records) {
     }
     
     records.forEach(data => {
+        // Al renderizar, usamos el IMC que está guardado (el IMC corregido o el real)
         const { resultado, paClasificacion, riesgoAEnf, clasificacionMINSA } = getAptitude(data.imc, data.sexo, data.pab, data.pa);
         
         const badgeClass = getSimplifiedAptitudeStyle(resultado); 
@@ -1052,14 +1101,12 @@ function exportToWord() {
 }
 
 
-// --- FUNCIÓN PARA PROCESAR Y EXPORTAR DATOS ESTADÍSTICOS ---
-async function exportStatsToWord() {
+function exportStatsToWord() {
     if (!isAuthenticated) {
         displayMessage('Acceso Denegado', 'Debe iniciar sesión para operar.', 'error');
         return;
     }
     
-    // Obtener registros de la tabla (ya filtrados por el usuario)
     const records = currentFilteredRecords;
     
     if (records.length === 0) {
@@ -1067,7 +1114,6 @@ async function exportStatsToWord() {
         return;
     }
 
-    // 1. OBTENER INFORMACIÓN BASE
     const cipList = records.map(r => r.cip);
     const isIndividual = records.every((val, i, arr) => val === arr[0]);
     
@@ -1077,7 +1123,6 @@ async function exportStatsToWord() {
     
     const subtitleText = isIndividual ? `CIP: ${records[0].cip} | UNIDAD: ${records[0].unidad}` : `Registros Analizados: ${records.length}`;
 
-    // 2. GENERACIÓN DE LA TABLA DE PROGRESIÓN INDIVIDUAL
     let progressionTableHtml = '';
     
     if (isIndividual) {
@@ -1087,7 +1132,6 @@ async function exportStatsToWord() {
         `;
     }
     
-    // 3. RESUMEN ESTADÍSTICO CONSOLIDADO (Aplica para Individual y Grupo)
     const totalRegistrosValidos = records.filter(r => r.motivo !== 'NO ASISTIÓ').length;
     const totalApto = records.filter(r => r.resultado && r.resultado.startsWith('APTO') && r.motivo !== 'NO ASISTIÓ').length;
     const totalInapto = records.filter(r => r.resultado && r.resultado.startsWith('INAPTO') && r.motivo !== 'NO ASISTIÓ').length;
@@ -1119,7 +1163,6 @@ async function exportStatsToWord() {
         </table>
     `;
 
-    // 4. GENERACIÓN DEL DOCUMENTO WORD FINAL
     const reportDate = new Date().toLocaleDateString('es-ES').replace(/\//g, '-');
     let htmlContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte SIMCEP Estadístico</title><style>body { font-family: Arial, sans-serif; }</style></head><body>`;
     
@@ -1133,7 +1176,6 @@ async function exportStatsToWord() {
     
     htmlContent += `</body></html>`;
 
-    // LÓGICA DE DESCARGA
     const filename = `Reporte_Estadistico_SIMCEP_${isIndividual ? records[0].cip : 'Consolidado'}_${reportDate.replace(/\//g, '-')}.doc`;
     const blob = new Blob([htmlContent], { type: 'application/msword' });
     const downloadUrl = URL.createObjectURL(blob);
@@ -1147,7 +1189,6 @@ async function exportStatsToWord() {
     displayMessage('Exportación Exitosa', `Se ha generado el archivo ${filename} para Word.`, 'success');
 }
 
-// --- FUNCIÓN PARA DESCARGAR GRÁFICA COMO IMAGEN ---
 function downloadChartAsImage() {
     const canvas = document.getElementById('bmiProgressionChart');
     if (!canvas || !progressionChart) {
@@ -1173,7 +1214,6 @@ function downloadChartAsImage() {
 }
 
 
-// --- FUNCIÓN PARA EXPORTAR A EXCEL (LLAMA AL SERVIDOR) ---
 function exportToExcel() {
     if (!isAuthenticated || currentFilteredRecords.length === 0) {
         displayMessage('Error', 'No se puede exportar sin registros o sin autenticación.', 'error');
@@ -1240,17 +1280,24 @@ document.getElementById('bmi-form')?.addEventListener('submit', function(e) {
     const pa = 'N/A'; 
     
     if (weight > 0 && height > 0 && pab > 0) {
-        const imc = calculateIMC(weight, height);
+        const imc = calculateIMC(weight, height); // IMC REAL
         
+        // NO APLICAMOS LA EXCEPCIÓN AQUÍ (es la calculadora pública)
         const { resultado, detalle } = getAptitude(imc, sex, pab, pa); 
 
-        const badgeClass = resultado.startsWith('INAPTO') ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
+        const { badgeClass: newBadgeClass, boxBorderClass, boxColor } = getAptitudeUI(resultado);
+        
+        const resultBox = document.getElementById('result-box');
+        resultBox.className = `mt-8 p-6 rounded-lg hidden ${boxBorderClass}`; 
+        
         document.getElementById('bmi-value').textContent = imc;
+        document.getElementById('bmi-value').style.color = `var(--${boxColor.substring(5)})`;
         const aptitudeBadge = document.getElementById('aptitude-badge');
         aptitudeBadge.textContent = resultado;
-        aptitudeBadge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
+        aptitudeBadge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${newBadgeClass}`;
         document.getElementById('aptitude-detail').textContent = detalle;
-        document.getElementById('result-box').classList.remove('hidden');
+        resultBox.classList.remove('hidden');
+
     } else {
         displayMessage('Datos Inválidos', 'Por favor, ingrese Peso, Altura y Perímetro Abdominal válidos.', 'error');
     }
@@ -1274,8 +1321,8 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
     const grado = form.elements['input-role']?.value || '';
     const apellido = form.elements['input-lastname']?.value || '';
     const nombre = form.elements['input-firstname']?.value || '';
-    const dob = form.elements['input-dob']?.value || '';
-    const edad = calculateAge(dob); 
+    const dob = form.elements['input-dob']?.value || ''; // Está oculto, pero capturamos el valor (si lo tiene)
+    const edad = parseInt(form.elements['input-age-admin']?.value || 0); // EDAD MANUAL
     const peso = parseFloat(form.elements['input-weight-admin']?.value || 0);
     const altura = parseFloat(form.elements['input-height-admin']?.value || 0);
     const pab = parseFloat(form.elements['input-pab']?.value || 0); 
@@ -1294,7 +1341,7 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
     const formattedMonthYear = `${regMonth}/${regYear}`; 
 
     // VALIDACIÓN DE CAMPOS CLAVE
-    if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 0 && gguu && unidad && dni && pa) {
+    if (peso > 0 && altura > 0 && pab > 0 && cip && grado && apellido && nombre && edad >= 18 && gguu && unidad && dni && pa) { // Se asume edad mínima de 18
         
         if (!isEditMode) {
             try { 
@@ -1326,29 +1373,64 @@ document.getElementById('admin-record-form')?.addEventListener('submit', async f
             }
         }
         
-        const imc = calculateIMC(peso, altura);
-        const { resultado, detalle, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(imc, sexo, pab, pa); 
+        const imcReal = calculateIMC(peso, altura); // IMC Real (con decimales)
+
+        // APLICAR LA EXCEPCIÓN DE LA DIRECTIVA
+        const imcExceptionResult = applyMilitaryIMCException(imcReal, sexo, pab);
+        const imcToSave = imcExceptionResult.imc.toFixed(1); // 29.9 o el IMC Real (1 decimal)
         
-        const badgeClass = getSimplifiedAptitudeStyle(resultado);
-        document.getElementById('admin-bmi-value').textContent = imc;
+        // Si se sobrescribió, forzamos la Aptitud y la Clasificación. Si no, usamos la lógica normal.
+        let finalAptitudeResult;
+        
+        if (imcExceptionResult.sobrescrito) {
+            // Si se sobrescribió (Regla Militar):
+            const paClasificacion = getClassificacionPA(pa);
+            const riesgoAEnf = getRiskByWaist(sexo, pab);
+            
+            finalAptitudeResult = { 
+                resultado: 'APTO', // Siempre APTO por excepción
+                detalle: `IMC Real: ${imcReal} -> Sobrescrito a ${imcToSave} por EXCEPCIÓN MASA MUSCULAR.`,
+                clasificacionMINSA: 'SOBREPESO (EXCEPCIÓN)',
+                paClasificacion: paClasificacion,
+                riesgoAEnf: riesgoAEnf,
+                motivoInapto: imcExceptionResult.motivo
+            };
+        } else {
+            // Si NO se sobrescribió:
+            finalAptitudeResult = getAptitude(imcReal, sexo, pab, pa); 
+        }
+
+        // DESDE AQUÍ, USAR finalAptitudeResult
+        const { resultado, detalle, paClasificacion, riesgoAEnf, motivoInapto } = finalAptitudeResult; 
+
+        // VISUALIZACIÓN
+        const { badgeClass: newBadgeClass, boxBorderClass, boxColor } = getAptitudeUI(resultado);
+        
+        const adminResultBox = document.getElementById('admin-result-box');
+        adminResultBox.className = `mt-8 p-6 rounded-lg hidden ${boxBorderClass}`;
+        
+        document.getElementById('admin-bmi-value').textContent = imcToSave; // Mostrar el IMC corregido/final
+        document.getElementById('admin-bmi-value').style.color = `var(--${boxColor.substring(5)})`;
         document.getElementById('admin-aptitude-badge').textContent = resultado;
-        document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${badgeClass}`;
+        document.getElementById('admin-aptitude-badge').className = `aptitude-badge px-3 py-1 text-sm font-bold rounded-full shadow-lg uppercase ${newBadgeClass}`;
         document.getElementById('admin-aptitude-detail').textContent = detalle;
-        document.getElementById('admin-result-box').classList.remove('hidden');
+        adminResultBox.classList.remove('hidden');
         
         const primerApellido = currentAdminFullName?.split(' ')[0] || ''; 
         const adminRoleText = currentAdminFullName?.includes('MD') || currentAdminFullName?.includes('DR') ? 'DR/MD' : (currentUserRole === 'superadmin' ? 'SUPERADMIN' : 'ADMIN');
         const digitadorFinal = `${currentAdminUser} (${adminRoleText} ${primerApellido})`;
 
+
+        // GUARDADO FINAL (Usa imcToSave como el valor de IMC)
         if (isEditMode) {
-            const updatedRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, motivo: motivoInapto, dob: dob, fecha: formattedDate }; 
+            const updatedRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc: imcToSave, motivo: motivoInapto, dob: dob, fecha: formattedDate }; 
             updateRecord(currentEditingRecordId, updatedRecord);
         } else {
-            const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha: formattedDate, registradoPor: digitadorFinal, motivo: motivoInapto, dob: dob }; 
+            const newRecord = { gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc: imcToSave, fecha: formattedDate, registradoPor: digitadorFinal, motivo: motivoInapto, dob: dob }; 
             saveRecord(newRecord);
         }
     } else {
-        displayMessage('Error de Entrada', 'Por favor, complete todos los campos obligatorios y revise valores numéricos (Peso, Altura, PAB).', 'error');
+        displayMessage('Error de Entrada', 'Por favor, complete todos los campos obligatorios y revise valores numéricos (Edad >= 18, Peso, Altura, PAB).', 'error');
         document.getElementById('admin-result-box')?.classList.add('hidden');
     }
 });
@@ -1369,6 +1451,7 @@ document.getElementById('age-filter')?.addEventListener('input', filterTable);
 document.getElementById('month-filter')?.addEventListener('change', filterTable);
 document.getElementById('aptitude-filter')?.addEventListener('change', filterTable); 
 document.getElementById('add-user-form')?.addEventListener('submit', handleAddUser);
+document.getElementById('cancel-edit-button')?.addEventListener('click', cancelEdit);
 
 
 // LÓGICA DE AUTOCOMPLETADO
@@ -1400,14 +1483,13 @@ async function fetchAndAutoFill(queryType, queryValue) {
         document.getElementById('input-lastname').value = patientData.apellido || '';
         document.getElementById('input-firstname').value = patientData.nombre || '';
         
+        // MODIFICADO: Solo se autocompleta la edad (manual)
         document.getElementById('input-age-admin').value = patientData.edad || '';
-        if (patientData.fechaNacimiento) {
-            document.getElementById('input-dob').value = patientData.fechaNacimiento; 
-            const edadCalculada = calculateAge(patientData.fechaNacimiento);
-            document.getElementById('input-age-admin').value = edadCalculada;
-        } else {
-             document.getElementById('input-dob').value = '';
+        // El DOB no se usa, pero se mantiene para la estructura
+        if (document.getElementById('input-dob')) { 
+             document.getElementById('input-dob').value = patientData.fechaNacimiento || ''; 
         }
+
 
         // VACÍO DE CAMPOS VARIABLES (PESADA CLÍNICA)
         document.getElementById('input-pa').value = ''; 
@@ -1443,14 +1525,12 @@ document.addEventListener('DOMContentLoaded', () => {
         registroMonthInput.value = `${year}-${month}`;
     }
 
-    // ** SOLUCIÓN CRÍTICA PARA VISIBILIDAD DE REGISTROS VIEJOS **
     // Forzar el filtro de la tabla a "Todos los Meses" al cargar
     const filterSelect = document.getElementById('month-filter');
     if (filterSelect) {
-        filterSelect.value = ""; // Valor de "Todos los Meses"
-        filterSelect.setAttribute('data-current-value', ""); // Resetear el estado guardado
+        filterSelect.value = ""; 
+        filterSelect.setAttribute('data-current-value', ""); 
     }
-    // ** FIN SOLUCIÓN CRÍTICA **
 
     updateUI();
 });
