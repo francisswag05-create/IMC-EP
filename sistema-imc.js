@@ -852,6 +852,10 @@ function renderProgressionChart(records) {
 
     const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     
+    // ***************************************************************
+    // *** SOLUCIÓN GRÁFICA: REVERTIR PARA ORDEN CRONOLÓGICO ASCENDENTE ***
+    // ***************************************************************
+    // La BD devuelve DESC (más reciente arriba), al revertir, obtenemos ASC (más antiguo arriba/izquierda)
     const chartRecordsAsc = [...records].reverse(); 
     
     const labels = chartRecordsAsc.map(r => {
