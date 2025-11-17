@@ -173,6 +173,8 @@ async function updateUI() {
     const userInfo = document.getElementById('current-user-info');
     const monitoringTextEl = document.getElementById('monitoring-status-text');
     const userManagementSection = document.getElementById('user-management-section');
+    // Nuevo elemento para la gestión masiva (solo visible para superadmin)
+    const massNoShowCard = document.getElementById('mass-no-show-card'); 
 
     if (!publicView || !adminView || !userInfo) return; 
 
@@ -192,8 +194,10 @@ async function updateUI() {
         if (userManagementSection) {
             if (currentUserRole === 'superadmin') {
                 userManagementSection.style.display = 'grid';
+                if (massNoShowCard) massNoShowCard.style.display = 'block'; // Mostrar Gestión Masiva
             } else {
                 userManagementSection.style.display = 'none';
+                if (massNoShowCard) massNoShowCard.style.display = 'none'; // Ocultar Gestión Masiva
             }
         }
         
@@ -224,6 +228,7 @@ async function updateUI() {
         if (userManagementSection) {
             userManagementSection.style.display = 'none';
         }
+        if (massNoShowCard) massNoShowCard.style.display = 'none';
     }
 }
 
@@ -403,13 +408,13 @@ function getAptitude(imc, sexo, pab, paString) {
     }
     
     // ***************************************************************
-    // *** MODIFICACIÓN: CLASIFICACIÓN DE IMC (CUADRO 1) ***
+    // *** MODIFICACIÓN: CLASIFICACIÓN DE IMC (CUADRO 1) - CORRECCIÓN DE 'SOBREPESO' ***
     // ***************************************************************
     if (imcFloat < 16) clasificacionMINSA = "DELGADEZ GRADO III";
     else if (imcFloat < 17) clasificacionMINSA = "DELGADEZ GRADO II";
     else if (imcFloat < 18.5) clasificacionMINSA = "DELGADEZ GRADO I";
     else if (imcFloat < 25) clasificacionMINSA = "NORMAL";
-    else if (imcFloat < 30) clasificacionMINSA = "SOBREPESO (PREOBESO)";
+    else if (imcFloat < 30) clasificacionMINSA = "SOBREPESO"; // <-- CORRECCIÓN APLICADA AQUÍ
     else if (imcFloat < 35) clasificacionMINSA = "OBESIDAD GRADO I";
     else if (imcFloat < 40) clasificacionMINSA = "OBESIDAD GRADO II";
     else clasificacionMINSA = "OBESIDAD GRADO III";
@@ -1479,6 +1484,72 @@ document.getElementById('month-filter')?.addEventListener('change', filterTable)
 document.getElementById('aptitude-filter')?.addEventListener('change', filterTable); 
 document.getElementById('add-user-form')?.addEventListener('submit', handleAddUser);
 document.getElementById('cancel-edit-button')?.addEventListener('click', cancelEdit);
+
+
+// ***************************************************************
+// *** NUEVO EVENT LISTENER: GESTIÓN MASIVA DE INASISTENCIA ***
+// ***************************************************************
+document.getElementById('mass-no-show-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    if (currentUserRole !== 'superadmin') {
+        displayMessage('ACCESO DENEGADO', 'Solo el Super Administrador puede ejecutar este proceso.', 'error');
+        return;
+    }
+
+    const monthInput = document.getElementById('input-mass-month');
+    const monthYear = monthInput.value; // YYYY-MM
+    
+    if (!monthYear) {
+        displayMessage('Error', 'Debe seleccionar un mes.', 'warning');
+        return;
+    }
+
+    const [year, month] = monthYear.split('-');
+    const targetMonthYear = `${month}/${year}`; // MM/YYYY para el backend
+
+    // Validar el mes futuro antes de confirmar
+    const now = new Date();
+    const currentYearMonth = now.getFullYear() * 100 + (now.getMonth() + 1);
+    const selectedYearMonth = parseInt(year) * 100 + parseInt(month);
+    
+    if (selectedYearMonth > currentYearMonth) {
+        displayMessage('MES NO PERMITIDO', 'No se permite registrar datos masivos en meses futuros o el mes actual.', 'error');
+        return;
+    }
+
+    if (!confirm(`ADVERTENCIA: ¿Está seguro de registrar "NO ASISTIÓ" para TODO el personal sin registro en ${month}/${year}?`)) {
+        return;
+    }
+    
+    const btn = document.getElementById('mass-no-show-button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> PROCESANDO...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch('/api/records/mass-no-show', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetMonthYear: targetMonthYear })
+        });
+        
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || data.message || 'Error desconocido al ejecutar el proceso masivo.');
+        }
+
+        displayMessage('PROCESO EXITOSO', data.message, 'success');
+        await fetchAndDisplayRecords(); // Recargar la tabla con los nuevos registros
+        
+    } catch (error) {
+        displayMessage('ERROR CRÍTICO', error.message, 'error');
+        console.error('Error en el proceso masivo:', error);
+    } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    }
+});
 
 
 // LÓGICA DE AUTOCOMPLETADO
