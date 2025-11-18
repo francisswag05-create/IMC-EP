@@ -388,7 +388,6 @@ app.post('/api/records', (req, res) => {
         .catch(err => {
              // LOG DE DEBUG CRÍTICO: Muestra el error exacto de Postgres
              console.error("ERROR DE POSTGRES EN /api/records:", err.message, "Detalles:", err.detail);
-             // Si es un error de clave foránea o dato no permitido, ayuda a debuggear
              res.status(500).json({ error: "Error al guardar el registro: " + err.message });
         });
 });
@@ -523,7 +522,7 @@ app.post('/api/export-excel', async (req, res) => {
             const endMonthYear = `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
             
             // 3. RELLENAR LOS MESES FALTANTES
-            // La función generateMissingRecords devolverá el historial completo, rellenando vacíos
+            // La función generateMissingRecords devuelve el historial completo, rellenando vacíos
             finalRecordsToExport = generateMissingRecords(allPatientRecords, endMonthYear);
         }
         // ****************************************************
@@ -790,12 +789,12 @@ app.post('/api/users', (req, res) => {
 
 // [DELETE] /api/users/:cip (Postgres)
 app.delete('/api/users/:cip', (req, res) => {
-    const { cip } = req.params;
-    const sql = "DELETE FROM users WHERE cip = $1";
-    pool.query(sql, [cip])
+    const { id } = req.params;
+    const sql = "DELETE FROM records WHERE id = $1";
+    pool.query(sql, [id])
         .then(result => {
-            if (result.rowCount === 0) return res.status(404).json({ message: "Usuario no encontrado." });
-            res.json({ message: `Usuario con CIP ${cip} eliminado.` }); 
+            if (result.rowCount === 0) return res.status(404).json({ message: "Registro no encontrado." });
+            res.json({ message: `Registro con ID ${id} eliminado.` }); 
         })
         .catch(err => res.status(500).json({ error: err.message }));
 });
