@@ -1,4 +1,4 @@
-// server.js (Versión con Exportación a Excel Corregida)
+// server.js (Versión Definitiva con Todas las Correcciones y Automatización de Año)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -536,6 +536,8 @@ app.post('/api/export-excel', async (req, res) => {
         const worksheet = workbook.addWorksheet('CONSOLIDADO IMC');
         
         const GGUU_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6E699' } }; // Similar a 'Oro, Enfasis 4, Claro 40%'
+        const MOTIVO_HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }; // Amarillo puro
+        const MOTIVO_CONTENT_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } }; // Rojo claro de advertencia
         const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF365F37' } }; 
         const FONT_WHITE = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
         const FONT_DARK = { name: 'Calibri', size: 11, color: { argb: 'FF000000' } }; // Para texto negro en fondo claro
@@ -545,12 +547,12 @@ app.post('/api/export-excel', async (req, res) => {
         const DATA_FILL_STANDARD = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }; 
 
         // ****************************************************
-        // *** MODIFICACIÓN: ELIMINAR COLUMNA DIGITADOR ***
+        // *** MODIFICACIÓN 1: DEFINICIÓN DE HEADERS Y ORDEN ***
         // ****************************************************
         const HEADERS = [
             "N", "GGUU", "UNIDAD", "GRADO", "APELLIDOS Y NOMBRES", "DNI", "CIP", 
-            "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION PA", 
-            "PAB", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", "MOTIVO" // Digitador ELIMINADO
+            "SEXO", "EDAD", "PA", "CLASIFICACION PA", "PAB", "RIESGO A ENF SEGUN PABD",
+            "PESO", "TALLA", "IMC", "CLASIFICACION DE IMC", "MOTIVO" // Última columna (18)
         ];
         
         const headerRow = worksheet.getRow(6);
@@ -573,9 +575,10 @@ app.post('/api/export-excel', async (req, res) => {
             const paClasificacion = (record.paClasificacion || 'N/A').toUpperCase();
             const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
             const resultado = (record.resultado || 'N/A').toUpperCase(); 
+            const motivoTexto = record.motivo || 'N/A';
             
             // ****************************************************
-            // *** MODIFICACIÓN: ASIGNACIÓN DE VALORES (SIN DIGITADOR) ***
+            // *** MODIFICACIÓN 2: ASIGNACIÓN DE VALORES EN NUEVO ORDEN ***
             // ****************************************************
             dataRow.values = [
                 index + 1, 
@@ -587,15 +590,15 @@ app.post('/api/export-excel', async (req, res) => {
                 record.cip, 
                 record.sexo, 
                 record.edad, 
-                record.peso, 
-                record.altura, 
                 record.pa, 
                 paClasificacion, 
                 record.pab, 
                 riesgoAEnf, 
+                record.peso, 
+                record.altura, 
                 record.imc, 
                 clasificacionIMC, 
-                record.motivo || 'N/A' // Último valor: MOTIVO
+                motivoTexto // Columna MOTIVO
             ];
             
             dataRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
@@ -614,20 +617,30 @@ app.post('/api/export-excel', async (req, res) => {
                     cell.font = FONT_RED; 
                 }
                 
-                if (colNumber === 13 && paClasificacion.includes('HIPERTENSION')) {
+                // Columna MOTIVO (Columna 18) - Última columna
+                if (colNumber === HEADERS.length) { 
+                    if (motivoTexto.includes('NO ASISTIÓ')) {
+                        cell.fill = MOTIVO_CONTENT_FILL;
+                    }
+                    cell.alignment = { vertical: 'middle', horizontal: 'left' };
+                }
+                
+                // Aplicar estilos de riesgo
+                if (colNumber === 11 && paClasificacion.includes('HIPERTENSION')) {
                     cell.font = FONT_RED;
                 }
-                if (colNumber === 15 && riesgoAEnf.includes('MUY ALTO')) {
+                if (colNumber === 13 && riesgoAEnf.includes('MUY ALTO')) {
                     cell.font = FONT_RED;
                 }
             });
         });
         
         // Encabezados del reporte
-        const lastColumnLetter = worksheet.getColumn(HEADERS.length).letter; // Obtener la letra de la última columna
+        const lastColumnLetter = worksheet.getColumn(HEADERS.length).letter; // Obtener la letra de la última columna ('R')
         
+        // 1. Encabezados de Título (AF AÑO AUTOMÁTICO)
         worksheet.mergeCells(`A1:${lastColumnLetter}2`); 
-        worksheet.getCell('A1').value = 'CONSOLIDADO DEL IMC DE LA III DE AF 2025';
+        worksheet.getCell('A1').value = `CONSOLIDADO DEL IMC DE LA III DE AF ${new Date().getFullYear()}`; 
         worksheet.getCell('A1').font = { name: 'Calibri', size: 16, bold: true };
         worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
         
@@ -636,9 +649,22 @@ app.post('/api/export-excel', async (req, res) => {
         worksheet.getCell('A4').font = { name: 'Calibri', size: 14, bold: true };
         worksheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle' };
         
-        // ****************************************************
-        // *** MODIFICACIÓN: AGREGAR FILTRO DE EXCEL ***
-        // ****************************************************
+        // 2. Colorear y Ocultar la columna MOTIVO (Columna 18 / R)
+        const motivoHeaderCell = worksheet.getCell(`${lastColumnLetter}6`); 
+        motivoHeaderCell.fill = MOTIVO_HEADER_FILL; // Amarillo
+        motivoHeaderCell.font = FONT_DARK;
+        
+        // Ocultar la columna MOTIVO (Columna 18)
+        worksheet.getColumn(HEADERS.length).hidden = true; 
+
+        // 3. Agregar Cuadro de Texto Fijo (Asumimos que la columna S es la 19 y T la 20 - al lado del cuerpo)
+        const infoBoxCell = worksheet.getCell('T1');
+        infoBoxCell.value = 'III DE\nCIA CMDO Nº113\nIPRESS\nAREQUIPA';
+        infoBoxCell.font = { name: 'Calibri', size: 11, bold: true };
+        infoBoxCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
+        worksheet.mergeCells('T1:U4'); // Fusionar el espacio para el cuadro de texto
+        
+        // 4. Agregar Filtro de Excel
         worksheet.autoFilter = {
             from: 'A6', // Inicia en el encabezado de la columna A (Fila 6)
             to: `${lastColumnLetter}6` // Termina en la última columna del encabezado (Fila 6)
