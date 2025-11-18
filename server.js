@@ -1,4 +1,4 @@
-// server.js (Versión Definitiva con Todas las Correcciones Finales de Exportación)
+// server.js (Versión Definitiva con Todas las Correcciones y Automatización de Año)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -523,7 +523,8 @@ app.post('/api/export-excel', async (req, res) => {
             const endMonthYear = `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
             
             // 3. RELLENAR LOS MESES FALTANTES
-            // La función generateMissingRecords devolverá el historial completo, rellenando vacíos
+            // Se asume que generateMissingRecords devuelve los registros completos (con NO ASISTIÓ)
+            // y ordenados DESCendentemente (más reciente al inicio).
             finalRecordsToExport = generateMissingRecords(allPatientRecords, endMonthYear);
         }
         // ****************************************************
@@ -561,14 +562,8 @@ app.post('/api/export-excel', async (req, res) => {
             cell.fill = HEADER_FILL;
             cell.font = FONT_WHITE;
             cell.border = BORDER_THIN;
-            // Desactivar wrapText para CLASIFICACION DE IMC (Columna 17 / Q)
-            const isClasificacionIMC = colNumber === 17;
-            cell.alignment = { 
-                vertical: 'middle', 
-                horizontal: 'center', 
-                wrapText: isClasificacionIMC ? false : true 
-            };
-            worksheet.getColumn(colNumber).width = (colNumber === 5) ? 30 : (isClasificacionIMC ? 18 : 12); // Ajuste de ancho para que entre en una línea
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            worksheet.getColumn(colNumber).width = (colNumber === 5) ? 30 : 12; 
         });
         
         finalRecordsToExport.forEach((record, index) => { // ITERAR SOBRE finalRecordsToExport
@@ -641,36 +636,33 @@ app.post('/api/export-excel', async (req, res) => {
         });
         
         // Encabezados del reporte
-        const lastColumnLetter = worksheet.getColumn(HEADERS.length).letter; // Obtener la letra de la última columna ('R' - Columna 18)
+        const lastColumnLetter = worksheet.getColumn(HEADERS.length).letter; // Obtener la letra de la última columna ('R')
         
         // 1. Encabezados de Título (AF AÑO AUTOMÁTICO)
-        // Tamaño 26 y Subrayado
         worksheet.mergeCells(`A1:${lastColumnLetter}2`); 
         worksheet.getCell('A1').value = `CONSOLIDADO DEL IMC DE LA III DE AF ${new Date().getFullYear()}`; 
-        worksheet.getCell('A1').font = { name: 'Calibri', size: 26, bold: true, underline: 'single' }; 
+        worksheet.getCell('A1').font = { name: 'Calibri', size: 16, bold: true };
         worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
         
-        // Título de Reporte Mensual (Tamaño 22)
         worksheet.mergeCells(`A4:${lastColumnLetter}4`); 
         worksheet.getCell('A4').value = `PESADA MENSUAL - ${reportMonth}`; 
-        worksheet.getCell('A4').font = { name: 'Calibri', size: 22, bold: true }; 
+        worksheet.getCell('A4').font = { name: 'Calibri', size: 14, bold: true };
         worksheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle' };
         
         // 2. Colorear y Ocultar la columna MOTIVO (Columna 18 / R)
         const motivoHeaderCell = worksheet.getCell(`${lastColumnLetter}6`); 
-        motivoHeaderCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }; // Amarillo puro
+        motivoHeaderCell.fill = MOTIVO_HEADER_FILL; // Amarillo
         motivoHeaderCell.font = FONT_DARK;
         
         // Ocultar la columna MOTIVO (Columna 18)
         worksheet.getColumn(HEADERS.length).hidden = true; 
 
-        // 3. Agregar Cuadro de Texto Fijo (Encima de la Clasificación IMC - Columna 17)
-        // Fusionamos celdas P1 a R4 (Columnas 16, 17, 18)
-        worksheet.mergeCells('P1:R4'); 
-        const infoBoxCell = worksheet.getCell('P1');
+        // 3. Agregar Cuadro de Texto Fijo (Asumimos que la columna S es la 19 y T la 20 - al lado del cuerpo)
+        const infoBoxCell = worksheet.getCell('T1');
         infoBoxCell.value = 'III DE\nCIA CMDO Nº113\nIPRESS\nAREQUIPA';
         infoBoxCell.font = { name: 'Calibri', size: 11, bold: true };
         infoBoxCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
+        worksheet.mergeCells('T1:U4'); // Fusionar el espacio para el cuadro de texto
         
         // 4. Agregar Filtro de Excel
         worksheet.autoFilter = {
