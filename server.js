@@ -1,4 +1,4 @@
-// server.js (Versión Final con Corrección de Actualización de Usuario)
+// server.js (Versión con Exportación a Excel Corregida)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -119,9 +119,9 @@ async function initializeDatabase() {
 initializeDatabase();
 
 
-// NUEVA FUNCIÓN: Cálculo de edad a partir de la fecha de nacimiento (DOB)
+// FUNCIÓN DE UTILIDAD: Cálculo de edad a partir de la fecha de nacimiento (DOB)
 function calculateAgeFromDOB(dobString, referenceDateString) {
-    if (!dobString || !referenceDateString || dobString.length < 10 || referenceDateString.length < 10) return 0;
+    if (!dobString || !referenceDateString || dobString.length < 10) return 0;
     
     // Asumimos dobString es YYYY-MM-DD y referenceDateString es DD/MM/YYYY
     const [dobYear, dobMonth, dobDay] = dobString.split('-').map(Number);
@@ -134,6 +134,63 @@ function calculateAgeFromDOB(dobString, referenceDateString) {
         age--;
     }
     return age;
+}
+
+// FUNCIÓN DE UTILIDAD: Relleno de Registros Faltantes
+function generateMissingRecords(records, endMonthYear) {
+    if (records.length === 0) return [];
+    
+    const recordsByMonth = records.reduce((acc, r) => {
+        acc[r.fecha.substring(3)] = r; // Clave: MM/YYYY
+        return acc;
+    }, {});
+    
+    const sortedRecords = [...records].sort((a, b) => {
+        const [dA, mA, yA] = a.fecha.split('/').map(Number);
+        const [dB, mB, yB] = b.fecha.split('/').map(Number);
+        return new Date(yA, mA - 1, dA).getTime() - new Date(yB, mB - 1, dB).getTime();
+    });
+
+    const firstRecord = sortedRecords[0];
+    if (!firstRecord) return [];
+
+    let [startMonth, startYear] = firstRecord.fecha.substring(3).split('/').map(Number);
+    let [endMonth, endYear] = endMonthYear.split('/').map(Number);
+    
+    let allRecordsMap = { ...recordsByMonth };
+    let checkDate = new Date(startYear, startMonth - 1, 1);
+    let endDate = new Date(endYear, endMonth - 1, 1);
+    
+    while (checkDate.getTime() <= endDate.getTime()) {
+        const checkMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
+        const checkYear = checkDate.getFullYear();
+        const checkMonthYear = `${checkMonth}/${checkYear}`;
+        const checkDateFormatted = `01/${checkMonth}/${checkYear}`;
+
+        if (!allRecordsMap[checkMonthYear]) {
+            const ageAtMissingDate = calculateAgeFromDOB(firstRecord.dob, checkDateFormatted); 
+            
+            const missingRecord = {
+                ...firstRecord,
+                id: null,
+                fecha: checkDateFormatted, 
+                peso: 0, altura: 0.01, imc: 0, pab: 0, 
+                pa: 'N/A', paClasificacion: 'N/A', riesgoAEnf: 'N/A',
+                motivo: 'NO ASISTIÓ', 
+                registradoPor: 'SISTEMA (NO ASISTIÓ)', 
+                edad: ageAtMissingDate 
+            };
+            allRecordsMap[checkMonthYear] = missingRecord;
+        }
+
+        checkDate.setMonth(checkDate.getMonth() + 1);
+    }
+    
+    return Object.values(allRecordsMap).sort((a, b) => {
+        const [dA, mA, yA] = a.fecha.split('/').map(Number);
+        const [dB, mB, yB] = b.fecha.split('/').map(Number);
+        return new Date(yB, mB - 1, dB).getTime() - new Date(yA, mA - 1, dA).getTime();
+    });
 }
 
 
@@ -197,7 +254,6 @@ app.get('/api/stats', (req, res) => {
 
 // [GET] /api/records/check-monthly/:cip (Postgres) - Lógica de relleno de registros
 app.get('/api/records/check-monthly/:cip', (req, res) => {
-    // ... (Tu código de relleno de registros es correcto y queda igual) ...
     const { cip } = req.params;
     const { targetMonthYear } = req.query; 
 
@@ -371,26 +427,130 @@ app.delete('/api/records/:id', (req, res) => {
         .catch(err => res.status(500).json({ error: err.message }));
 });
 
+// ***************************************************************
+// *** RUTA AÑADIDA: GESTIÓN MASIVA DE INASISTENCIA ***
+// ***************************************************************
+// [POST] /api/records/mass-no-show
+app.post('/api/records/mass-no-show', async (req, res) => {
+    const { targetMonthYear } = req.body; // Formato esperado: MM/YYYY (Ej: 10/2025)
+
+    if (!targetMonthYear || targetMonthYear.length !== 7 || targetMonthYear.indexOf('/') !== 2) {
+        return res.status(400).json({ error: "Mes de registro inválido. Use formato MM/YYYY." });
+    }
+
+    // Usaremos el día 01 del mes siguiente al de destino para establecer el límite
+    const [targetMonth, targetYear] = targetMonthYear.split('/').map(Number);
+    const dateLimit = new Date(targetYear, targetMonth, 1); // 1er día del mes SGT
+    
+    // Seguridad: No permitir registro masivo en un mes futuro o el mes actual
+    if (dateLimit.getTime() > new Date().getTime() + 86400000) { // Añadimos 1 día para tolerancia
+        return res.status(403).json({ error: "No se permite el registro masivo en meses futuros o el mes actual." });
+    }
+
+    try {
+        // 1. Obtener la información base (el registro más reciente de CADA CIP)
+        // Usamos una subconsulta para obtener el último registro por CIP
+        const latestRecordsSql = `
+            SELECT DISTINCT ON (cip) * 
+            FROM records 
+            ORDER BY cip, id DESC;
+        `;
+        const allLatestRecords = await pool.query(latestRecordsSql);
+        const allPersonnel = allLatestRecords.rows;
+
+        if (allPersonnel.length === 0) {
+            return res.status(404).json({ message: "No hay personal registrado en la base de datos para monitorear." });
+        }
+
+        let insertedCount = 0;
+        const insertSql = `INSERT INTO records (gguu, unidad, dni, pa, pab, paClasificacion, riesgoAEnf, sexo, cip, grado, apellido, nombre, edad, peso, altura, imc, fecha, registradoPor, motivo, dob) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`;
+
+        for (const record of allPersonnel) {
+            // Verificar si YA tiene un registro en el mes objetivo
+            const checkSql = "SELECT id FROM records WHERE cip = $1 AND fecha LIKE $2 LIMIT 1";
+            const alreadyExists = await pool.query(checkSql, [record.cip, `%/${targetMonthYear}`]);
+
+            if (alreadyExists.rowCount === 0) {
+                // Si NO tiene registro en el mes objetivo, insertamos NO ASISTIÓ
+                const checkDateFormatted = `01/${targetMonthYear}`;
+                const ageAtMissingDate = calculateAgeFromDOB(record.dob, checkDateFormatted); 
+                
+                const values = [
+                    record.gguu, record.unidad, record.dni, 'N/A', 0, 'N/A', 'N/A', // PA, PAB y Clasif. por defecto
+                    record.sexo, record.cip, record.grado, record.apellido, record.nombre, 
+                    ageAtMissingDate, 0, 0.01, 0, // Peso, Altura, IMC por defecto
+                    checkDateFormatted, 'SISTEMA (INASISTENCIA MASIVA)', 'NO ASISTIÓ', record.dob
+                ];
+                
+                await pool.query(insertSql, values);
+                insertedCount++;
+            }
+        }
+
+        return res.json({ 
+            message: `Proceso masivo completado. Se insertaron ${insertedCount} registros de 'NO ASISTIÓ' para el mes ${targetMonthYear}.`,
+            insertedCount
+        });
+
+    } catch (error) {
+        console.error("Error en el proceso masivo de inasistencia:", error);
+        return res.status(500).json({ error: "Error interno al ejecutar el proceso masivo: " + error.message });
+    }
+});
+
+
 
 // [POST] /api/export-excel (Postgres)
 app.post('/api/export-excel', async (req, res) => {
     try {
         const { records, reportMonth } = req.body; 
         
+        // ****************************************************
+        // *** MODIFICACIÓN: LÓGICA DE RELLENO DE REGISTROS PARA EXPORTACIÓN ***
+        // ****************************************************
+        let finalRecordsToExport = records;
+        
+        // Solo aplicar la lógica de relleno si tenemos al menos un paciente individual para la progresión
+        if (records.length > 0 && records.every(r => r.cip === records[0].cip)) {
+            const targetCip = records[0].cip;
+            
+            // 1. OBTENER TODOS LOS REGISTROS HISTÓRICOS DEL PACIENTE DESDE LA BASE DE DATOS
+            const allPatientRecordsResult = await pool.query("SELECT * FROM records WHERE cip = $1 ORDER BY id DESC", [targetCip]);
+            const allPatientRecords = allPatientRecordsResult.rows;
+
+            // 2. Determinar la fecha de corte (Mes más reciente registrado en el filtro o mes actual)
+            const now = new Date();
+            const endMonthYear = `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+            
+            // 3. RELLENAR LOS MESES FALTANTES
+            // Se asume que generateMissingRecords devuelve los registros completos (con NO ASISTIÓ)
+            // y ordenados DESCendentemente (más reciente al inicio).
+            finalRecordsToExport = generateMissingRecords(allPatientRecords, endMonthYear);
+        }
+        // ****************************************************
+
+        // ****************************************************
+        // *** CONFIGURACIÓN DE COLORES Y FILTROS EN EXCEL ***
+        // ****************************************************
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('CONSOLIDADO IMC');
         
+        const GGUU_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6E699' } }; // Similar a 'Oro, Enfasis 4, Claro 40%'
         const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF365F37' } }; 
         const FONT_WHITE = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+        const FONT_DARK = { name: 'Calibri', size: 11, color: { argb: 'FF000000' } }; // Para texto negro en fondo claro
         const BORDER_THIN = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         const FONT_RED = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFF0000' } }; 
         const FONT_NORMAL = { name: 'Calibri', size: 11 };
         const DATA_FILL_STANDARD = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }; 
 
+        // ****************************************************
+        // *** MODIFICACIÓN: ELIMINAR COLUMNA DIGITADOR ***
+        // ****************************************************
         const HEADERS = [
             "N", "GGUU", "UNIDAD", "GRADO", "APELLIDOS Y NOMBRES", "DNI", "CIP", 
             "SEXO", "EDAD", "PESO", "TALLA", "PA", "CLASIFICACION PA", 
-            "PAB", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", "MOTIVO", "DIGITADOR"
+            "PAB", "RIESGO A ENF SEGUN PABD", "IMC", "CLASIFICACION DE IMC", "MOTIVO" // Digitador ELIMINADO
         ];
         
         const headerRow = worksheet.getRow(6);
@@ -404,35 +564,19 @@ app.post('/api/export-excel', async (req, res) => {
             worksheet.getColumn(colNumber).width = (colNumber === 5) ? 30 : 12; 
         });
         
-        records.forEach((record, index) => {
+        finalRecordsToExport.forEach((record, index) => { // ITERAR SOBRE finalRecordsToExport
             const rowNumber = 7 + index; 
             const dataRow = worksheet.getRow(rowNumber);
             
-            // Asumo que tu objeto 'record' en el frontend tiene la propiedad 'clasificacionMINSA'
-            // Si el nombre es diferente, el error está en cómo creas el objeto para la exportación.
+            // Lógica de clasificación a utilizar (asumiendo que frontend ya la ejecutó en la lista de 'records')
             const clasificacionIMC = (record.clasificacionMINSA || 'N/A').toUpperCase(); 
             const paClasificacion = (record.paClasificacion || 'N/A').toUpperCase();
             const riesgoAEnf = (record.riesgoAEnf || 'N/A').toUpperCase();
-            // Asumo que 'resultado' es el campo de Aptitud Final
             const resultado = (record.resultado || 'N/A').toUpperCase(); 
             
-            let digitadorDisplay = record.registradoPor || '';
-            if (digitadorDisplay) {
-                const adminFullName = digitadorDisplay.replace(/\s*\([^)]*\)/g, '').trim(); 
-                const adminNameParts = adminFullName.split(' ').filter(p => p.length > 0);
-                
-                if (digitadorDisplay.includes('SUPERADMIN')) {
-                    const match = digitadorDisplay.match(/([^\s]+)\s+\(([^)]+)\)/);
-                    digitadorDisplay = match ? `${match[1]} (${match[2]})` : 'SUPERADMIN';
-                } else {
-                    if (adminNameParts.length >= 2) {
-                        digitadorDisplay = `${adminNameParts[0]} ${adminNameParts[1]}`.trim();
-                    } else {
-                        digitadorDisplay = adminNameParts.join(' ').trim() || record.cip; 
-                    }
-                }
-            }
-            
+            // ****************************************************
+            // *** MODIFICACIÓN: ASIGNACIÓN DE VALORES (SIN DIGITADOR) ***
+            // ****************************************************
             dataRow.values = [
                 index + 1, 
                 record.gguu, 
@@ -451,8 +595,7 @@ app.post('/api/export-excel', async (req, res) => {
                 riesgoAEnf, 
                 record.imc, 
                 clasificacionIMC, 
-                record.motivo || 'N/A', 
-                digitadorDisplay 
+                record.motivo || 'N/A' // Último valor: MOTIVO
             ];
             
             dataRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
@@ -460,6 +603,12 @@ app.post('/api/export-excel', async (req, res) => {
                 cell.border = BORDER_THIN;
                 cell.font = FONT_NORMAL;
                 cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                
+                // Columna GGUU (Columna 2) con el color de relleno solicitado
+                if (colNumber === 2) { 
+                    cell.fill = GGUU_FILL;
+                    cell.font = FONT_DARK;
+                }
                 
                 if (colNumber === 17 && (resultado.includes('INAPTO') || clasificacionIMC.includes('OBESIDAD'))) {
                     cell.font = FONT_RED; 
@@ -475,15 +624,25 @@ app.post('/api/export-excel', async (req, res) => {
         });
         
         // Encabezados del reporte
-        worksheet.mergeCells('A1:S2');
+        const lastColumnLetter = worksheet.getColumn(HEADERS.length).letter; // Obtener la letra de la última columna
+        
+        worksheet.mergeCells(`A1:${lastColumnLetter}2`); 
         worksheet.getCell('A1').value = 'CONSOLIDADO DEL IMC DE LA III DE AF 2025';
         worksheet.getCell('A1').font = { name: 'Calibri', size: 16, bold: true };
         worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
         
-        worksheet.mergeCells('A4:S4');
+        worksheet.mergeCells(`A4:${lastColumnLetter}4`); 
         worksheet.getCell('A4').value = `PESADA MENSUAL - ${reportMonth}`; 
         worksheet.getCell('A4').font = { name: 'Calibri', size: 14, bold: true };
         worksheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle' };
+        
+        // ****************************************************
+        // *** MODIFICACIÓN: AGREGAR FILTRO DE EXCEL ***
+        // ****************************************************
+        worksheet.autoFilter = {
+            from: 'A6', // Inicia en el encabezado de la columna A (Fila 6)
+            to: `${lastColumnLetter}6` // Termina en la última columna del encabezado (Fila 6)
+        };
         
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename=' + 'Reporte_SIMCEP_Mensual.xlsx');
