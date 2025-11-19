@@ -1,4 +1,4 @@
-// server.js (Versión Definitiva con Solución a Prueba de Fallos para Excel)
+// server.js (Versión Definitiva y Limpia, sin Errores de Sintaxis)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -665,8 +665,11 @@ app.post('/api/export-excel', async (req, res) => {
 
         // 3. Agregar Cuadro de Texto Fijo (Encima de la Clasificación IMC - Columna 17)
         // Fusionamos celdas P1 a R4 (Columnas 16, 17, 18)
-        worksheet.mergeCells('P1:R4'); 
-        const infoBoxCell = worksheet.getCell('P1');
+        // ****************************************************
+        // *** SOLUCIÓN AL ERROR DE MERGE: Mover a celdas S, T, U (19, 20, 21) ***
+        // ****************************************************
+        worksheet.mergeCells('S1:U4'); 
+        const infoBoxCell = worksheet.getCell('S1'); // Celdas 19 a 21
         infoBoxCell.value = 'III DE\nCIA CMDO Nº113\nIPRESS\nAREQUIPA';
         infoBoxCell.font = { name: 'Calibri', size: 11, bold: true };
         infoBoxCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
