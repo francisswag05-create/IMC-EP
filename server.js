@@ -1,4 +1,4 @@
-// server.js (Versión Definitiva con Solución de Error 500 y Formato Final)
+// server.js (Versión Definitiva con Solución a Prueba de Fallos para Excel)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -787,7 +787,7 @@ app.post('/api/users', (req, res) => {
 });
 // ... (resto de las rutas: DELETE /api/users/:cip, /api/forgot-password, /api/reset-password) ...
 
-// [DELETE] /api/users/:cip (Postgres)
+// [DELETE] /api/records/:id (Postgres)
 app.delete('/api/records/:id', (req, res) => {
     const { id } = req.params;
     const sql = "DELETE FROM records WHERE id = $1";
