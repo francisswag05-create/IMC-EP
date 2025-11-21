@@ -6,7 +6,7 @@
     <title>SIMCEP - Sistema de Índice de Masa Corporal del Ejército del Perú</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Incluir Chart.js (Necesario para generar el gráfico de línea) -->
+    <!-- Incluir Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
     
     <link rel="stylesheet" href="styles.css">
@@ -67,6 +67,7 @@
 
         
         <section id="public-access-view" class="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-10">
+            <!-- TARJETA DE LOGIN -->
             <div class="lg:col-span-1 card-tech">
                 <h2 class="text-2xl font-bold mb-6 flex items-center pb-3">
                     <i class="fas fa-shield-alt text-xl mr-3 text-color-accent-lime"></i> ACCESO ADMINISTRADOR
@@ -84,22 +85,22 @@
                         <i class="fas fa-sign-in-alt mr-2"></i> ACCEDER
                     </button>
                     
-                    <!-- ENLACE DE RECUPERACIÓN -->
                     <p class="text-center text-xs pt-2">
                         <a href="#" id="forgot-password-link" class="text-color-text-muted hover:text-white transition-colors duration-300">
                             ¿Olvidó su contraseña?
                         </a>
                     </p>
-                    
                 </div>
             </div>
 
+            <!-- TARJETA CALCULADORA (DISEÑO RESTAURADO) -->
             <div id="bmi-form-card" class="lg:col-span-2 card-tech">
                 <h2 class="text-2xl font-bold mb-6 flex items-center pb-3">
                     <i class="fas fa-ruler-vertical text-xl mr-3 text-color-primary-green"></i> CALCULADORA DE ÍNDICE DE MASA CORPORAL
                 </h2> 
 
                 <form id="bmi-form" class="space-y-6">
+                    <!-- GRID DE 4 COLUMNAS PARA VERSE COMO EN LA FOTO -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
                         <div>
                             <label for="input-sex" class="label-tech">Sexo</label>
@@ -121,7 +122,7 @@
 
                         <div>
                             <label for="input-pab-public" class="label-tech">PAB (cm)</label>
-                            <input type="number" id="input-pab-public" value="95" placeholder="Ej: 95" min="30" step="0.1" required class="input-tech">
+                            <input type="number" id="input-pab-public" value="93" placeholder="Ej: 93" min="30" step="0.1" required class="input-tech">
                         </div>
                     </div>
 
@@ -147,7 +148,7 @@
             </div>
         </section>
 
-        
+        <!-- VISTA DEL ADMINISTRADOR -->
         <section id="admin-dashboard-view" class="hidden-view mt-10 text-white"> 
             <h2 class="text-3xl font-bold mb-8 admin-header-title pb-3 tracking-wider flex items-center">
                 <i class="fas fa-tachometer-alt text-2xl mr-3"></i> OPERACIONES Y GESTIÓN CG-III DE 
@@ -168,10 +169,9 @@
                     <i class="fas fa-user-plus mr-2 text-color-accent-lime"></i> REGISTRO DE NUEVO PERSONAL
                 </h3>
                 
-                <!-- INICIO DEL FORMULARIO DE REGISTRO DE PERSONAL -->
                 <form id="admin-record-form" class="space-y-4">
                     
-                    <!-- Fila 1: GGUU, UNIDAD, DNI, CIP -->
+                    <!-- Fila 1 -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label for="input-gguu" class="label-tech">GGUU</label>
@@ -191,11 +191,10 @@
                         </div>
                     </div>
 
-                    <!-- Fila 2: GRADO (ACTUALIZADO), SEXO, PA -->
+                    <!-- Fila 2: GRADOS ACTUALIZADOS -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label for="input-role" class="label-tech">GRADO</label>
-                            <!-- LISTA DE GRADOS ACTUALIZADA SEGÚN REQUERIMIENTO MILITAR -->
                             <select id="input-role" required class="input-tech">
                                 <option value="" disabled selected>Seleccione Grado</option>
                                 <optgroup label="OFICIALES GENERALES">
@@ -211,7 +210,7 @@
                                     <option value="CAP">CAP</option>
                                     <option value="TTE">TTE</option>
                                     <option value="ALFZ">ALFZ</option>
-                                    <option value="STTE">STTE</option>
+                                    <option value="STTE">STTE</option> <!-- Agregado -->
                                 </optgroup>
                                 <optgroup label="TÉCNICOS">
                                     <option value="TCO JS">TCO JS</option>
@@ -241,7 +240,6 @@
                                 <option value="Femenino">Femenino</option>
                             </select>
                         </div>
-                        <!-- DOB oculto -->
                         <div class="hidden"> 
                             <label for="input-dob" class="label-tech">FECHA DE NACIMIENTO</label>
                             <input type="date" id="input-dob" class="input-tech"> 
@@ -252,7 +250,7 @@
                         </div>
                     </div>
 
-                    <!-- Fila 3: APELLIDOS, NOMBRES, EDAD, PESO -->
+                    <!-- Fila 3 -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label for="input-lastname" class="label-tech">APELLIDOS</label>
@@ -272,7 +270,7 @@
                         </div>
                     </div>
                     
-                    <!-- Fila 4: ALTURA, PAB, MES -->
+                    <!-- Fila 4 -->
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                          <div>
                             <label for="input-height-admin" class="label-tech">ALTURA (metros)</label>
@@ -313,20 +311,18 @@
                     </div>
                     
                 </form>
-                <!-- FIN DEL FORMULARIO DE REGISTRO DE PERSONAL -->
-
             </div>
             
             <h3 class="text-xl font-bold text-color-accent-gold mb-4 mt-6 border-b border-color-border pb-2 flex items-center col-span-full"><i class="fas fa-table mr-2 text-color-primary-green"></i> REGISTROS OPERACIONALES</h3>
             
-            <!-- INICIO DE FILTROS Y BOTONES MODIFICADOS -->
+            <!-- FILTROS Y BOTONES (Con el nuevo Filtro de Unidad) -->
             <div class="flex flex-wrap items-end gap-4 mb-6">
-                <!-- NUEVO: FILTRO POR UNIDAD -->
+                <!-- FILTRO UNIDAD NUEVO -->
                 <div>
                     <label for="unit-filter" class="label-tech inline-block mb-1">Filtrar por Unidad:</label>
                     <select id="unit-filter" class="input-tech text-sm w-48">
                         <option value="">Todas las Unidades</option>
-                        <!-- Se llenará dinámicamente con JS -->
+                        <!-- Se llenará con JS -->
                     </select>
                 </div>
 
@@ -355,7 +351,7 @@
                         <option value="INAPTO">INAPTO</option>
                     </select>
                 </div>
-                
+                        
                 <div class="min-w-[150px]">
                     <label for="input-report-month" class="label-tech inline-block mb-1">Mes del Reporte:</label>
                     <input type="text" id="input-report-month" placeholder="Ej: DICIEMBRE" class="input-tech text-sm w-full" value="MES DE REPORTE">
@@ -373,7 +369,6 @@
                     </button>
                 </div>
             </div>
-            <!-- FIN DE FILTROS Y BOTONES MODIFICADOS -->
 
             <div class="overflow-x-auto table-container rounded-xl shadow-2xl p-2 col-span-full">
                 <table class="min-w-full divide-y divide-color-border">
@@ -388,7 +383,6 @@
                 </table>
             </div>
 
-            <!-- SECCIÓN DE VISUALIZACIÓN DE GRÁFICAS -->
             <div class="card-tech mb-10 mt-6" id="stats-chart-card" style="display: none;">
                 <h3 class="text-xl font-bold text-color-accent-gold mb-4 flex justify-between items-center pb-2 border-b border-color-border">
                     <span class="flex items-center">
@@ -403,7 +397,6 @@
                 </div>
             </div>
             
-            <!-- SECCIÓN DE GESTIÓN DE USUARIOS -->
             <div id="user-management-section" class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-16 col-span-full border-t-2 border-color-border pt-8">
                 <div class="card-tech">
                     <h3 class="text-xl font-bold text-color-accent-gold mb-6 border-b border-color-border pb-2 flex items-center">
@@ -457,7 +450,7 @@
     </main>
 
     <footer class="bg-color-green-dark text-color-text-muted text-center p-4 mt-12 border-t border-color-border">
-        <p class="text-sm tracking-wider">&copy; III División del Ejército del Perú. <span class="text-color-primary-green font-bold">Patria y Honor.</span></p>
+        <p class="text-sm tracking-wider">&copy; 2025 III División del Ejército del Perú. <span class="text-color-primary-green font-bold">Patria y Honor.</span></p>
     </footer>
 
     <script src="sistema-imc.js"></script>
