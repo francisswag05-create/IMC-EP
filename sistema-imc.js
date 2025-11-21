@@ -1,4 +1,4 @@
-// sistema-imc.js (Versión Final Completa y Sincronizada con el Nuevo Diseño)
+// sistema-imc.js (Versión Final Definitiva: Autocompletado CIP/DNI + Filtros + Gráficos + Word)
 
 // --- 1. VARIABLES GLOBALES ---
 let isAuthenticated = false;
@@ -14,7 +14,7 @@ let progressionChart = null;
 // --- 2. UTILIDAD DE INTERFAZ ---
 function displayMessage(title, text, type) {
     const box = document.getElementById('message-box');
-    if (!box) return; 
+    if (!box) return;
     
     const titleEl = box.querySelector('p:nth-child(1)');
     const textEl = box.querySelector('p:nth-child(2)');
@@ -40,7 +40,6 @@ function populateUnitFilter() {
     const unitSelect = document.getElementById('unit-filter');
     if (!unitSelect) return;
 
-    // Obtener unidades únicas
     const units = [...new Set(allRecordsFromDB.map(item => item.unidad))].sort();
     const currentVal = unitSelect.value;
     
@@ -95,31 +94,26 @@ function filterTable() {
 
     let recordsToDisplay = allRecordsFromDB;
     
-    // Filtro Nombre
     if (nameSearchTerm) {
         recordsToDisplay = recordsToDisplay.filter(record => 
             `${record.apellido} ${record.nombre}`.toLowerCase().includes(nameSearchTerm)
         );
     }
     
-    // Filtro Edad
     if (ageFilterValue && !isNaN(parseInt(ageFilterValue))) {
         recordsToDisplay = recordsToDisplay.filter(record => record.edad == ageFilterValue);
     }
     
-    // Filtro Mes
     if (monthFilter) { 
         recordsToDisplay = recordsToDisplay.filter(record => 
             record.fecha && record.fecha.substring(3) === monthFilter
         );
     }
 
-    // Filtro Unidad
     if (unitFilterValue) {
         recordsToDisplay = recordsToDisplay.filter(record => record.unidad === unitFilterValue);
     }
     
-    // Filtro Aptitud
     if (aptitudeFilterValue && aptitudeFilterValue !== 'TODAS LAS APTITUDES') {
         recordsToDisplay = recordsToDisplay.filter(record => {
             const { resultado } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
@@ -127,7 +121,6 @@ function filterTable() {
         });
     }
     
-    // Mapeo final con cálculos actualizados
     currentFilteredRecords = recordsToDisplay.map(record => {
         const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
         return {
@@ -144,23 +137,22 @@ function filterTable() {
     renderProgressionChart(currentFilteredRecords);
 }
 
-// --- 4. UI UPDATES Y RENDERIZADO ---
-
+// --- 4. UI UPDATES ---
 async function updateUI() {
-    const publicView = document.getElementById('public-access-view');
-    const adminView = document.getElementById('admin-dashboard-view');
-    const userInfo = document.getElementById('current-user-info');
-    const monitoringTextEl = document.getElementById('monitoring-status-text');
-    const userManagementSection = document.getElementById('user-management-section');
+    const pView = document.getElementById('public-access-view');
+    const aView = document.getElementById('admin-dashboard-view');
+    const uInfo = document.getElementById('current-user-info');
+    const monText = document.getElementById('monitoring-status-text');
+    const uMgmt = document.getElementById('user-management-section');
 
     if (!publicView || !adminView) return;
 
     if (isAuthenticated) {
-        publicView.classList.add('hidden-view');
+        pView.classList.add('hidden-view');
         adminView.classList.remove('hidden-view');
-        userInfo.textContent = `Usuario: ${currentAdminUser}`;
-        userInfo.classList.remove('text-color-accent-lime', 'border-gray-600');
-        userInfo.classList.add('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
+        uInfo.textContent = `Usuario: ${currentAdminUser}`;
+        uInfo.classList.remove('text-color-accent-lime', 'border-gray-600');
+        uInfo.classList.add('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
 
         if (monitoringTextEl && currentAdminFullName) {
             monitoringTextEl.innerHTML = `<i class="fas fa-check-double mr-3 text-color-accent-gold"></i> Monitoreo Activo: <span class="text-color-accent-lime">${currentAdminFullName}</span>`;
@@ -208,6 +200,25 @@ function updateAdminTableHeaders() {
     }
 }
 
+// --- 5. CRUD API ---
+
+async function fetchAndDisplayRecords() {
+    try {
+        const response = await fetch('/api/records');
+        if (!response.ok) throw new Error('Error al obtener registros.');
+        allRecordsFromDB = await response.json();
+        
+        populateMonthFilter();
+        populateUnitFilter();
+        filterTable();
+        
+    } catch (error) {
+        console.error("Error:", error);
+        const tb = document.getElementById('admin-table-body');
+        if(tb) tb.innerHTML = `<tr><td colspan="12" class="text-center py-10">Error de conexión.</td></tr>`;
+    }
+}
+
 function renderTable(records) {
     const tableBody = document.getElementById('admin-table-body');
     if (!tableBody) return;
@@ -218,7 +229,7 @@ function renderTable(records) {
         return;
     }
     if (records.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="12" class="text-center py-10">No hay registros que coincidan con los filtros.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="12" class="text-center py-10">No hay registros.</td></tr>`;
         return;
     }
     
@@ -235,25 +246,24 @@ function renderTable(records) {
         else if(clasifDisplay.includes('EXCEPCIÓN')) clasifDisplay = "SOBREPESO (EXC)";
 
         // Botones
-        let editBtn = `<button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4"><i class="fas fa-pencil-alt"></i></button>`;
+        let editBtn = `<button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Editar"><i class="fas fa-pencil-alt"></i></button>`;
         if(data.motivo === 'NO ASISTIÓ') editBtn = `<button class="text-gray-500 text-lg mr-4" disabled><i class="fas fa-pencil-alt"></i></button>`;
-        const delBtn = `<button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg"><i class="fas fa-trash-alt"></i></button>`;
+        const delBtn = `<button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar"><i class="fas fa-trash-alt"></i></button>`;
 
-        // Valores visuales
-        const vPeso = data.peso > 0 ? data.peso : '-';
-        const vTalla = data.altura > 0.1 ? data.altura : '-';
-        const vIMC = data.imc > 0 ? data.imc : 'N/A';
+        const displayPeso = data.peso > 0 ? data.peso : '-';
+        const displayAltura = data.altura > 0.1 ? data.altura : '-';
+        const displayIMC = data.imc > 0 ? data.imc : 'N/A';
 
         row.innerHTML = `
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${data.cip || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">${data.grado || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${(data.apellido||'').toUpperCase()}, ${data.nombre||''}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${(data.apellido || 'N/A').toUpperCase()}, ${data.nombre || ''}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${data.pa || 'N/A'} <span class="text-xs opacity-75">(${paClasificacion})</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${data.pab || 'N/A'} <span class="text-xs opacity-75">(${riesgoAEnf})</span></td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">${vPeso}/${vTalla}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm text-color-accent-gold">${data.edad || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.startsWith('INAPTO')?'text-red-500':'text-color-accent-gold'}">${vIMC}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">${clasifDisplay}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm">${displayPeso} / ${displayAltura}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-gold">${data.edad || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.startsWith('INAPTO') ? 'text-red-500' : 'text-color-accent-gold'}">${displayIMC}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${clasifDisplay}</td>
             <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-center">${editBtn}${delBtn}</td>
@@ -292,7 +302,7 @@ function renderProgressionChart(records) {
         data: {
             labels: labels,
             datasets: [{
-                label: 'IMC',
+                label: 'Índice de Masa Corporal (IMC)',
                 data: dataPoints,
                 borderColor: '#CCFF00',
                 backgroundColor: 'rgba(204, 255, 0, 0.1)',
@@ -302,7 +312,7 @@ function renderProgressionChart(records) {
                 pointRadius: 5,
                 pointBackgroundColor: dataPoints.map(imc => {
                     if (imc === null) return '#808080';
-                    if (imc >= 30) return '#E74C3C';
+                    if (imc >= 30) return '#E74C3C'; 
                     if (imc >= 25) return '#FFD700';
                     return '#008744';
                 })
@@ -550,16 +560,51 @@ function exportStatsToWord() {
 
 function downloadChartAsImage() {
     const canvas = document.getElementById('bmiProgressionChart');
-    if(!canvas || !progressionChart) { displayMessage('Error', 'No hay gráfica.', 'error'); return; }
+    if(!canvas || !progressionChart) { displayMessage('Error', 'No hay gráfica visible.', 'error'); return; }
     const a = document.createElement('a');
     a.href = canvas.toDataURL('image/png');
     a.download = 'Grafica_IMC.png';
     a.click();
 }
 
-// --- 10. EVENT LISTENERS ---
+// --- 10. AUTOCOMPLETADO (CORREGIDO PARA CIP y DNI) ---
 
-document.getElementById('admin-record-form')?.addEventListener('submit', (e) => {
+function handleAutofill(value) {
+    if (value && value.length >= 6) { // Buscar si tiene 6+ caracteres (CIP o DNI)
+        fetch(`/api/patient/${value}`).then(r => r.json()).then(d => {
+            if (d.cip) {
+                const f = document.getElementById('admin-record-form');
+                // Llenar campos
+                f['input-gguu'].value = d.gguu || '';
+                f['input-unidad'].value = d.unidad || '';
+                f['input-dni'].value = d.dni || (value.length === 8 ? value : '');
+                f['input-userid'].value = d.cip || (value.length !== 8 ? value : '');
+                f['input-role'].value = d.grado || '';
+                f['input-lastname'].value = d.apellido || '';
+                f['input-firstname'].value = d.nombre || '';
+                f['input-age-admin'].value = d.edad || '';
+                f['input-sex-admin'].value = d.sexo || 'Masculino';
+                
+                // Limpiar mediciones
+                f['input-weight-admin'].value = '';
+                f['input-height-admin'].value = '';
+                f['input-pab'].value = '';
+                f['input-pa'].value = '';
+                
+                displayMessage('AUTOCOMPLETADO', `Datos de ${d.grado} ${d.apellido} cargados.`, 'success');
+            }
+        }).catch(() => { /* Silencio si no encuentra */ });
+    }
+}
+
+// LISTENERS DE AUTOCOMPLETADO (PARA AMBOS CAMPOS)
+document.getElementById('input-dni')?.addEventListener('blur', (e) => handleAutofill(e.target.value));
+document.getElementById('input-userid')?.addEventListener('blur', (e) => handleAutofill(e.target.value));
+
+
+// --- 11. EVENT LISTENERS GENERALES ---
+
+document.getElementById('admin-record-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = e.target;
     const regMonthVal = f['input-registro-month'].value;
@@ -574,8 +619,7 @@ document.getElementById('admin-record-form')?.addEventListener('submit', (e) => 
         grado: f['input-role'].value, sexo: f['input-sex-admin'].value, pa: f['input-pa'].value,
         apellido: f['input-lastname'].value, nombre: f['input-firstname'].value, edad: f['input-age-admin'].value,
         peso: f['input-weight-admin'].value, altura: f['input-height-admin'].value, pab: f['input-pab'].value,
-        fecha: `01/${String(m).padStart(2,'0')}/${y}`,
-        dob: f['input-dob'].value || '1990-01-01'
+        fecha: `01/${String(m).padStart(2,'0')}/${y}`, dob: f['input-dob'].value || '1990-01-01'
     };
     
     const imcReal = calculateIMC(rec.peso, rec.altura);
@@ -583,9 +627,7 @@ document.getElementById('admin-record-form')?.addEventListener('submit', (e) => 
     rec.imc = exc.imc.toFixed(1);
     const apt = getAptitude(rec.imc, rec.sexo, rec.pab, rec.pa);
     rec.motivo = exc.sobrescrito ? exc.motivo : apt.motivoInapto;
-    rec.paClasificacion = apt.paClasificacion;
-    rec.riesgoAEnf = apt.riesgoAEnf;
-    rec.registradoPor = currentAdminUser;
+    rec.paClasificacion = apt.paClasificacion; rec.riesgoAEnf = apt.riesgoAEnf; rec.registradoPor = currentAdminUser;
 
     if(isEditMode) updateRecord(currentEditingRecordId, rec);
     else saveRecord(rec);
@@ -595,7 +637,7 @@ document.getElementById('bmi-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const w = parseFloat(document.getElementById('input-weight').value);
     const h = parseFloat(document.getElementById('input-height').value);
-    const p = parseFloat(document.getElementById('input-pab-public').value);
+    const p = parseFloat(document.getElementById('input-pab-public').value); // ID CORRECTO
     const s = document.getElementById('input-sex').value;
     if(w>0 && h>0) {
         const imc = calculateIMC(w, h);
@@ -603,26 +645,11 @@ document.getElementById('bmi-form')?.addEventListener('submit', (e) => {
         document.getElementById('bmi-value').textContent = imc;
         document.getElementById('aptitude-badge').textContent = apt.resultado;
         document.getElementById('aptitude-detail').textContent = apt.clasificacionMINSA;
-        
-        const box = document.getElementById('result-box');
-        box.classList.remove('hidden');
+        document.getElementById('result-box').classList.remove('hidden');
         const badge = document.getElementById('aptitude-badge');
         const color = apt.resultado.startsWith('INAPTO') ? 'bg-red-700' : 'bg-green-700';
         badge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${color} text-white`;
     }
-});
-
-document.getElementById('input-dni')?.addEventListener('blur', (e) => {
-    const v = e.target.value;
-    if(v.length===8) fetch(`/api/patient/${v}`).then(r=>r.json()).then(d=>{
-        if(d.cip){
-            const f=document.getElementById('admin-record-form');
-            f['input-gguu'].value=d.gguu; f['input-unidad'].value=d.unidad; f['input-userid'].value=d.cip;
-            f['input-role'].value=d.grado; f['input-lastname'].value=d.apellido; f['input-firstname'].value=d.nombre;
-            f['input-age-admin'].value=d.edad; f['input-sex-admin'].value=d.sexo;
-            displayMessage('AUTO', 'Datos cargados.', 'success');
-        }
-    });
 });
 
 // --- INICIALIZACIÓN ---
