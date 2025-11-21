@@ -1,6 +1,6 @@
-// sistema-imc.js (Versión Definitiva: Con Filtro de Unidades, Gráficos y Validaciones)
+// sistema-imc.js (Versión Final Completa y Sincronizada con el Nuevo Diseño)
 
-// --- 1. Variables de Estado Globales ---
+// --- 1. VARIABLES GLOBALES ---
 let isAuthenticated = false;
 let currentAdminUser = null; 
 let currentAdminFullName = null; 
@@ -9,13 +9,13 @@ let allRecordsFromDB = [];
 let currentFilteredRecords = [];
 let isEditMode = false;
 let currentEditingRecordId = null;
-let progressionChart = null; // Variable para la instancia del gráfico Chart.js
+let progressionChart = null; 
 
-// --- 2. Funciones de Utilidad y UI ---
+// --- 2. UTILIDAD DE INTERFAZ ---
 function displayMessage(title, text, type) {
     const box = document.getElementById('message-box');
     if (!box) return; 
-
+    
     const titleEl = box.querySelector('p:nth-child(1)');
     const textEl = box.querySelector('p:nth-child(2)');
 
@@ -35,13 +35,12 @@ function displayMessage(title, text, type) {
     }, 5000);
 }
 
-// --- 3. Lógica de Filtros (INCLUYE NUEVO FILTRO DE UNIDAD) ---
-
+// --- 3. LÓGICA DE FILTROS ---
 function populateUnitFilter() {
     const unitSelect = document.getElementById('unit-filter');
     if (!unitSelect) return;
 
-    // Obtener lista única de unidades de la BD y ordenarlas
+    // Obtener unidades únicas
     const units = [...new Set(allRecordsFromDB.map(item => item.unidad))].sort();
     const currentVal = unitSelect.value;
     
@@ -56,7 +55,6 @@ function populateUnitFilter() {
         }
     });
     
-    // Mantener selección si existe
     if (currentVal) unitSelect.value = currentVal;
 }
 
@@ -93,36 +91,35 @@ function filterTable() {
     const ageFilterValue = document.getElementById('age-filter').value;
     const monthFilter = document.getElementById('month-filter').value; 
     const aptitudeFilterValue = (document.getElementById('aptitude-filter').value || '').toUpperCase(); 
-    const unitFilterValue = document.getElementById('unit-filter').value; // NUEVO: Filtro Unidad
+    const unitFilterValue = document.getElementById('unit-filter').value; 
 
     let recordsToDisplay = allRecordsFromDB;
     
-    // 1. Filtro Nombre
+    // Filtro Nombre
     if (nameSearchTerm) {
         recordsToDisplay = recordsToDisplay.filter(record => 
             `${record.apellido} ${record.nombre}`.toLowerCase().includes(nameSearchTerm)
         );
     }
     
-    // 2. Filtro Edad
+    // Filtro Edad
     if (ageFilterValue && !isNaN(parseInt(ageFilterValue))) {
-        const ageToMatch = parseInt(ageFilterValue);
-        recordsToDisplay = recordsToDisplay.filter(record => record.edad === ageToMatch);
+        recordsToDisplay = recordsToDisplay.filter(record => record.edad == ageFilterValue);
     }
     
-    // 3. Filtro Mes
+    // Filtro Mes
     if (monthFilter) { 
         recordsToDisplay = recordsToDisplay.filter(record => 
             record.fecha && record.fecha.substring(3) === monthFilter
         );
     }
-    
-    // 4. Filtro Unidad (NUEVO)
+
+    // Filtro Unidad
     if (unitFilterValue) {
         recordsToDisplay = recordsToDisplay.filter(record => record.unidad === unitFilterValue);
     }
     
-    // 5. Filtro Aptitud
+    // Filtro Aptitud
     if (aptitudeFilterValue && aptitudeFilterValue !== 'TODAS LAS APTITUDES') {
         recordsToDisplay = recordsToDisplay.filter(record => {
             const { resultado } = getAptitude(record.imc, record.sexo, record.pab, record.pa);
@@ -130,7 +127,7 @@ function filterTable() {
         });
     }
     
-    // Recalcular estados visuales y actualizar global
+    // Mapeo final con cálculos actualizados
     currentFilteredRecords = recordsToDisplay.map(record => {
         const { resultado, clasificacionMINSA, paClasificacion, riesgoAEnf, motivoInapto } = getAptitude(record.imc, record.sexo, record.pab, record.pa); 
         return {
@@ -147,460 +144,7 @@ function filterTable() {
     renderProgressionChart(currentFilteredRecords);
 }
 
-// --- 4. Renderizado de Tablas y Gráficas ---
-
-function renderTable(records) {
-    const tableBody = document.getElementById('admin-table-body');
-    if (!tableBody) return;
-    
-    tableBody.innerHTML = '';
-    const COLSPAN_VALUE = 12;
-    
-    if (!isAuthenticated) {
-        tableBody.innerHTML = `<tr><td colspan="${COLSPAN_VALUE}" class="text-center py-4">No está autenticado.</td></tr>`;
-        return;
-    }
-    if (records.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="${COLSPAN_VALUE}" class="text-center py-10">No hay registros que coincidan con los filtros.</td></tr>`;
-        return;
-    }
-    
-    records.forEach(data => {
-        const { resultado, paClasificacion, riesgoAEnf, clasificacionMINSA } = getAptitude(data.imc, data.sexo, data.pab, data.pa);
-        
-        const badgeClass = resultado.startsWith('INAPTO') ? 'bg-red-700 text-white' : 'bg-green-700 text-white';
-        const rowBgClass = resultado.startsWith('INAPTO') ? 'bg-red-900/10' : '';
-        const row = tableBody.insertRow();
-        row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
-        
-        // Determinar qué mostrar en clasificación (si es excepción o no asistió)
-        let clasifDisplay = clasificacionMINSA;
-        if (clasificacionMINSA === 'NO ASISTIÓ') clasifDisplay = "NO ASISTIÓ";
-        else if (clasificacionMINSA.includes('EXCEPCIÓN')) clasifDisplay = "SOBREPESO (EXC)";
-        else if (clasificacionMINSA === 'NORMAL') clasifDisplay = "NORMAL"; // Asegurar mayúsculas si es necesario
-        
-        // Botones de acción
-        let editBtn = `<button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4" title="Editar"><i class="fas fa-pencil-alt"></i></button>`;
-        if (data.motivo === 'NO ASISTIÓ') editBtn = `<button class="text-gray-500 text-lg mr-4" disabled title="No editable"><i class="fas fa-pencil-alt"></i></button>`;
-        
-        const deleteBtn = `<button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg" title="Eliminar"><i class="fas fa-trash-alt"></i></button>`;
-
-        // Formateo visual de valores nulos
-        const displayPeso = data.peso > 0 ? data.peso : '-';
-        const displayAltura = data.altura > 0.1 ? data.altura : '-';
-        const displayIMC = data.imc > 0 ? data.imc : 'N/A';
-
-        row.innerHTML = `
-            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${data.cip || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">${data.grado || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${(data.apellido || 'N/A').toUpperCase()}, ${data.nombre || ''}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">${data.pa || 'N/A'} <span class="text-xs opacity-75">(${paClasificacion})</span></td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">${data.pab || 'N/A'} <span class="text-xs opacity-75">(${riesgoAEnf})</span></td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">${displayPeso} / ${displayAltura}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-gold">${data.edad || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.startsWith('INAPTO') ? 'text-red-500' : 'text-color-accent-gold'}">${displayIMC}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${clasifDisplay}</td>
-            <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
-            <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-center">${editBtn}${deleteBtn}</td>
-        `;
-    });
-}
-
-function renderProgressionChart(records) {
-    const ctx = document.getElementById('bmiProgressionChart');
-    const chartCard = document.getElementById('stats-chart-card');
-    if (!ctx || !chartCard) return;
-
-    // Solo mostrar si es un solo usuario filtrado (por CIP)
-    const cipList = records.map(r => r.cip);
-    const isIndividual = records.length > 0 && cipList.every((val, i, arr) => val === arr[0]);
-    
-    if (!isIndividual) {
-        chartCard.style.display = 'none';
-        return;
-    }
-    
-    chartCard.style.display = 'block';
-
-    // Ordenar cronológicamente para la gráfica
-    const chartRecordsAsc = [...records].map(r => {
-        const parts = r.fecha.split('/'); 
-        const sortKey = parseInt(parts[2]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[0]); 
-        return { ...r, sortKey };
-    }).sort((a, b) => a.sortKey - b.sortKey);
-
-    const labels = chartRecordsAsc.map(r => r.fecha + (r.motivo==='NO ASISTIÓ' ? ' (X)' : ''));
-    const dataPoints = chartRecordsAsc.map(r => r.motivo === 'NO ASISTIÓ' ? null : parseFloat(r.imc));
-
-    if (progressionChart) progressionChart.destroy();
-
-    progressionChart = new Chart(ctx.getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Índice de Masa Corporal (IMC)',
-                data: dataPoints,
-                borderColor: '#CCFF00', // Lime
-                backgroundColor: 'rgba(204, 255, 0, 0.1)',
-                borderWidth: 2,
-                tension: 0.4,
-                spanGaps: true,
-                pointRadius: 5,
-                pointBackgroundColor: dataPoints.map(imc => {
-                    if (imc === null) return '#808080';
-                    if (imc >= 30) return '#E74C3C'; // Obesidad = Rojo
-                    if (imc >= 25) return '#FFD700'; // Sobrepeso = Amarillo
-                    return '#008744'; // Normal = Verde
-                })
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color: '#EEEEEE' } },
-                title: { 
-                    display: true, 
-                    text: `${records[0].grado} ${records[0].apellido} - PROGRESIÓN`, 
-                    color: '#FFD700',
-                    font: { size: 16 }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.raw === null ? 'NO ASISTIÓ' : `IMC: ${context.raw}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: { 
-                    min: 15, max: 40, 
-                    ticks: { color: '#A0A0A0' }, 
-                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                    title: { display: true, text: 'IMC', color: '#A0A0A0' }
-                },
-                x: { 
-                    ticks: { color: '#A0A0A0' }, 
-                    grid: { color: 'rgba(255, 255, 255, 0.1)' } 
-                }
-            }
-        }
-    });
-}
-
-// --- 5. Lógica de Negocio (Cálculos Aptitud) ---
-
-function calculateIMC(weight, height) {
-    if (height > 0) return (weight / (height * height)).toFixed(1);
-    return 0; 
-}
-
-function applyMilitaryIMCException(imcReal, sexo, pab) {
-    const imcFloat = parseFloat(imcReal);
-    const pabFloat = parseFloat(pab);
-    
-    if (imcFloat > 29.9) { 
-        if ((sexo === 'Masculino' && pabFloat < 94) || (sexo === 'Femenino' && pabFloat < 84)) {
-            return { imc: 29.9, sobrescrito: true, motivo: "APTO (EXCEPCIÓN PAB)" };
-        }
-    }
-    return { imc: imcFloat, sobrescrito: false, motivo: "" };
-}
-
-function getClassificacionPA(paString) {
-    if (!paString || !paString.includes('/')) return 'N/A';
-    const [sist, diast] = paString.split('/').map(Number);
-    if (isNaN(sist) || isNaN(diast)) return 'N/A';
-    if (sist >= 140 || diast >= 90) return 'HIPERTENSION (ESTADIO 2)';
-    if (sist >= 130 || diast >= 80) return 'HIPERTENSION (ESTADIO 1)';
-    if (sist >= 120 && diast < 80) return 'ELEVADA';
-    return 'NORMAL';
-}
-
-function getRiskByWaist(sexo, pab) {
-    const p = parseFloat(pab);
-    if (p === 0 || isNaN(p)) return 'N/A';
-    
-    if (sexo === 'Masculino') return p < 94 ? 'RIESGO BAJO' : p < 102 ? 'RIESGO ALTO' : 'RIESGO MUY ALTO';
-    return p < 80 ? 'RIESGO BAJO' : p < 88 ? 'RIESGO ALTO' : 'RIESGO MUY ALTO';
-}
-
-function getAptitude(imc, sexo, pab, paString) {
-    const i = parseFloat(imc);
-    const p = parseFloat(pab); 
-    
-    if (i === 0 || isNaN(i)) return { resultado: 'INAPTO', clasificacionMINSA: 'NO ASISTIÓ', paClasificacion: 'N/A', riesgoAEnf: 'N/A', motivoInapto: 'NO ASISTIÓ' };
-    
-    let minsa = "NORMAL";
-    if (i < 18.5) minsa = "DELGADEZ";
-    else if (i < 25) minsa = "NORMAL";
-    else if (i < 30) minsa = "SOBREPESO";
-    else if (i < 35) minsa = "OBESIDAD I";
-    else if (i < 40) minsa = "OBESIDAD II";
-    else minsa = "OBESIDAD III";
-    
-    const paClass = getClassificacionPA(paString);
-    const riesgo = getRiskByWaist(sexo, pab);
-    
-    let inapto = false;
-    let motivo = "";
-
-    if (i >= 30.0) { inapto = true; motivo = "IMC Obesidad"; } 
-    else if ((sexo === 'Masculino' && p >= 94) || (sexo === 'Femenino' && p >= 80)) { inapto = true; motivo = "Riesgo Abdominal"; }
-
-    let res = "APTO";
-    
-    // Excepción PAB para anular INAPTO
-    if (inapto) {
-        const cumpleExcepcion = (sexo === 'Masculino' && p < 94) || (sexo === 'Femenino' && p < 80);
-        if (cumpleExcepcion) {
-            res = "APTO (EXCEPCIÓN)";
-        } else {
-            res = `INAPTO (${motivo})`;
-        }
-    }
-
-    return { resultado: res, clasificacionMINSA: minsa, paClasificacion: paClass, riesgoAEnf: riesgo, motivoInapto: motivo };
-}
-
-// --- 6. Conexión con API (CRUD) ---
-
-async function fetchAndDisplayRecords() {
-    try {
-        const response = await fetch('/api/records'); // El servidor ya devuelve los registros
-        if (!response.ok) throw new Error('Error al cargar registros.');
-        allRecordsFromDB = await response.json();
-        
-        populateMonthFilter();
-        populateUnitFilter(); // Llenar filtro de unidades
-        filterTable(); // Renderizar tabla con filtros aplicados
-        
-    } catch (error) {
-        console.error("Error:", error);
-        const tb = document.getElementById('admin-table-body');
-        if(tb) tb.innerHTML = `<tr><td colspan="12" class="text-center">Error de conexión con el servidor.</td></tr>`;
-    }
-}
-
-async function saveRecord(record) {
-    try {
-        const response = await fetch('/api/records', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record)
-        });
-        if (!response.ok) throw new Error('Error al guardar.');
-        displayMessage('ÉXITO', 'Registro guardado.', 'success');
-        document.getElementById('admin-record-form').reset();
-        
-        // Reset mes al actual
-        const now = new Date();
-        const monthStr = String(now.getMonth() + 1).padStart(2, '0');
-        document.getElementById('input-registro-month').value = `${now.getFullYear()}-${monthStr}`;
-        
-        await fetchAndDisplayRecords();
-    } catch (error) { displayMessage('ERROR', error.message, 'error'); }
-}
-
-async function updateRecord(id, record) {
-    try {
-        const response = await fetch(`/api/records/${id}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record)
-        });
-        if (!response.ok) throw new Error('Error al actualizar.');
-        displayMessage('ÉXITO', 'Registro actualizado.', 'success');
-        cancelEdit();
-        await fetchAndDisplayRecords();
-    } catch (error) { displayMessage('ERROR', error.message, 'error'); }
-}
-
-async function deleteRecord(id) {
-    if (!confirm('¿Eliminar este registro permanentemente?')) return;
-    try {
-        await fetch(`/api/records/${id}`, { method: 'DELETE' });
-        displayMessage('ELIMINADO', 'Registro borrado.', 'warning');
-        await fetchAndDisplayRecords();
-    } catch (error) { displayMessage('ERROR', error.message, 'error'); }
-}
-
-// --- 7. Manejo del Formulario y Edición ---
-
-function handleEditRecord(id) {
-    const r = allRecordsFromDB.find(x => x.id === id);
-    if (!r) return;
-    
-    const f = document.getElementById('admin-record-form');
-    f['input-gguu'].value = r.gguu;
-    f['input-unidad'].value = r.unidad;
-    f['input-dni'].value = r.dni;
-    f['input-userid'].value = r.cip;
-    f['input-role'].value = r.grado;
-    f['input-sex-admin'].value = r.sexo;
-    f['input-lastname'].value = r.apellido;
-    f['input-firstname'].value = r.nombre;
-    f['input-age-admin'].value = r.edad;
-    f['input-weight-admin'].value = r.peso;
-    f['input-height-admin'].value = r.altura;
-    f['input-pab'].value = r.pab;
-    f['input-pa'].value = r.pa;
-    
-    // Formatear fecha DD/MM/YYYY -> YYYY-MM para el input type="month"
-    if(r.fecha && r.fecha.length === 10) {
-        const [d, m, y] = r.fecha.split('/');
-        f['input-registro-month'].value = `${y}-${m}`;
-    }
-
-    isEditMode = true;
-    currentEditingRecordId = id;
-    
-    const cancelBtn = document.getElementById('cancel-edit-button');
-    if(cancelBtn) cancelBtn.classList.remove('hidden');
-    
-    const submitBtn = document.querySelector('#admin-record-form button[type="submit"]');
-    submitBtn.innerHTML = '<i class="fas fa-save"></i> ACTUALIZAR REGISTRO';
-    
-    f.scrollIntoView({ behavior: 'smooth' });
-}
-
-function cancelEdit() {
-    isEditMode = false;
-    currentEditingRecordId = null;
-    document.getElementById('admin-record-form').reset();
-    
-    const cancelBtn = document.getElementById('cancel-edit-button');
-    if(cancelBtn) cancelBtn.classList.add('hidden');
-    
-    const submitBtn = document.querySelector('#admin-record-form button[type="submit"]');
-    submitBtn.innerHTML = '<i class="fas fa-database"></i> GUARDAR Y CALCULAR APTITUD';
-    
-    const now = new Date();
-    const monthStr = String(now.getMonth() + 1).padStart(2, '0');
-    document.getElementById('input-registro-month').value = `${now.getFullYear()}-${monthStr}`;
-    
-    const resBox = document.getElementById('admin-result-box');
-    if (resBox) resBox.classList.add('hidden');
-}
-
-// --- 8. Login y Gestión de Usuarios ---
-
-async function attemptAdminLogin() {
-    const u = document.getElementById('admin-username').value;
-    const p = document.getElementById('admin-password').value;
-    try {
-        const res = await fetch('/api/login', {
-            method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({cip:u, password:p})
-        });
-        const d = await res.json();
-        if(!res.ok) throw new Error(d.message);
-        
-        isAuthenticated = true;
-        currentAdminUser = d.user.cip; 
-        currentAdminFullName = d.user.fullName; 
-        currentUserRole = d.user.role;
-        
-        updateUI();
-        displayMessage('BIENVENIDO', `Hola, ${currentAdminFullName}`, 'success');
-    } catch(e) { displayMessage('ACCESO DENEGADO', e.message, 'error'); }
-}
-
-function logoutAdmin() {
-    isAuthenticated = false;
-    currentAdminUser = null;
-    currentAdminFullName = null;
-    currentUserRole = null;
-    allRecordsFromDB = [];
-    updateUI();
-    displayMessage('SESIÓN CERRADA', 'Hasta luego.', 'warning');
-}
-
-async function fetchAndDisplayUsers() {
-    const res = await fetch('/api/users');
-    const users = await res.json();
-    const tb = document.getElementById('users-table-body');
-    if(!tb) return;
-    tb.innerHTML = '';
-    users.forEach(u => {
-        tb.insertRow().innerHTML = `<td class="px-4 py-3">${u.cip}</td><td class="px-4 py-3">${u.fullName}</td><td class="px-4 py-3 text-center"><button onclick="handleEditUser('${u.cip}')" class="text-blue-500"><i class="fas fa-pencil-alt"></i></button></td>`;
-    });
-}
-
-function handleEditUser(cip) {
-    const p = prompt(`Nueva contraseña para ${cip}:`);
-    if(p) fetch(`/api/users/password/${cip}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({newPassword:p})})
-    .then(r=>{ if(r.ok) alert('Contraseña cambiada'); else alert('Error'); });
-}
-
-// --- 9. Exportación Excel (BOTÓN) ---
-
-function exportToExcel() {
-    if (!isAuthenticated) { displayMessage('Error', 'Inicie sesión.', 'error'); return; }
-    
-    const btn = document.getElementById('export-excel-button');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GENERANDO...'; btn.disabled = true;
-    
-    fetch('/api/export-excel', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ 
-            records: currentFilteredRecords, // Envía los registros filtrados por unidad/mes
-            reportMonth: document.getElementById('input-report-month').value 
-        })
-    })
-    .then(res => {
-        if(!res.ok) throw new Error('Error al generar Excel');
-        return res.blob();
-    })
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; 
-        const d = new Date();
-        a.download = `Reporte_SIMCEP_${d.getFullYear()}${d.getMonth()+1}${d.getDate()}.xlsx`;
-        document.body.appendChild(a); a.click(); a.remove();
-        displayMessage('ÉXITO', 'Excel descargado.', 'success');
-    })
-    .catch(e => displayMessage('ERROR', e.message, 'error'))
-    .finally(() => { btn.innerHTML = originalText; btn.disabled = false; });
-}
-
-// --- 10. Funciones que FALTABAN (Corrección del Error ReferenceError) ---
-
-function exportToWord() {
-    if (!isAuthenticated) { displayMessage('Error', 'Inicie sesión.', 'error'); return; }
-    if (currentFilteredRecords.length === 0) { displayMessage('Vacío', 'No hay datos.', 'warning'); return; }
-    
-    const reportDate = new Date().toLocaleDateString('es-ES');
-    let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte</title></head><body>`;
-    html += `<h1 style="text-align:center; color:#1e3a8a;">REPORTE SIMCEP</h1><p style="text-align:center;">Fecha: ${reportDate}</p>`;
-    html += `<table border="1" style="width:100%; border-collapse:collapse;"><thead><tr style="background:#2F4F4F; color:white;"><th>CIP</th><th>GRADO</th><th>NOMBRE</th><th>IMC</th><th>CLASIF</th></tr></thead><tbody>`;
-    
-    currentFilteredRecords.forEach(r => {
-        const apt = getAptitude(r.imc, r.sexo, r.pab, r.pa);
-        const color = apt.resultado.startsWith('INAPTO') ? 'color:red; font-weight:bold;' : 'color:green;';
-        html += `<tr><td>${r.cip}</td><td>${r.grado}</td><td>${r.apellido}</td><td>${r.imc}</td><td style="${color}">${apt.resultado}</td></tr>`;
-    });
-    html += `</tbody></table></body></html>`;
-    
-    const blob = new Blob([html], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url; link.download = `Reporte_SIMCEP.doc`;
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
-}
-
-function exportStatsToWord() {
-    displayMessage('INFO', 'Función de gráfica en Word en desarrollo. Use "Descargar Gráfica PNG".', 'warning');
-}
-
-function downloadChartAsImage() {
-    const canvas = document.getElementById('bmiProgressionChart');
-    if(!canvas || !progressionChart) { displayMessage('Error', 'No hay gráfica visible.', 'error'); return; }
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    a.download = 'Grafica_IMC.png';
-    a.click();
-}
+// --- 4. UI UPDATES Y RENDERIZADO ---
 
 async function updateUI() {
     const publicView = document.getElementById('public-access-view');
@@ -664,7 +208,356 @@ function updateAdminTableHeaders() {
     }
 }
 
-// --- 11. Event Listeners ---
+function renderTable(records) {
+    const tableBody = document.getElementById('admin-table-body');
+    if (!tableBody) return;
+    tableBody.innerHTML = '';
+    
+    if (!isAuthenticated) {
+        tableBody.innerHTML = `<tr><td colspan="12" class="text-center py-4">No está autenticado.</td></tr>`;
+        return;
+    }
+    if (records.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="12" class="text-center py-10">No hay registros que coincidan con los filtros.</td></tr>`;
+        return;
+    }
+    
+    records.forEach(data => {
+        const { resultado, paClasificacion, riesgoAEnf, clasificacionMINSA } = getAptitude(data.imc, data.sexo, data.pab, data.pa);
+        
+        const badgeClass = resultado.startsWith('INAPTO') ? 'bg-red-700 text-white' : 'bg-green-700 text-white';
+        const rowBgClass = resultado.startsWith('INAPTO') ? 'bg-red-900/10' : '';
+        const row = tableBody.insertRow();
+        row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
+        
+        let clasifDisplay = clasificacionMINSA;
+        if(clasifDisplay === 'NO ASISTIÓ') clasifDisplay = "NO ASISTIÓ";
+        else if(clasifDisplay.includes('EXCEPCIÓN')) clasifDisplay = "SOBREPESO (EXC)";
+
+        // Botones
+        let editBtn = `<button onclick="handleEditRecord(${data.id})" class="text-blue-500 hover:text-blue-400 text-lg mr-4"><i class="fas fa-pencil-alt"></i></button>`;
+        if(data.motivo === 'NO ASISTIÓ') editBtn = `<button class="text-gray-500 text-lg mr-4" disabled><i class="fas fa-pencil-alt"></i></button>`;
+        const delBtn = `<button onclick="deleteRecord(${data.id})" class="text-red-500 hover:text-red-400 text-lg"><i class="fas fa-trash-alt"></i></button>`;
+
+        // Valores visuales
+        const vPeso = data.peso > 0 ? data.peso : '-';
+        const vTalla = data.altura > 0.1 ? data.altura : '-';
+        const vIMC = data.imc > 0 ? data.imc : 'N/A';
+
+        row.innerHTML = `
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${data.cip || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">${data.grado || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${(data.apellido||'').toUpperCase()}, ${data.nombre||''}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm">${data.pa || 'N/A'} <span class="text-xs opacity-75">(${paClasificacion})</span></td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm">${data.pab || 'N/A'} <span class="text-xs opacity-75">(${riesgoAEnf})</span></td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm">${vPeso}/${vTalla}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-color-accent-gold">${data.edad || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.startsWith('INAPTO')?'text-red-500':'text-color-accent-gold'}">${vIMC}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm">${clasifDisplay}</td>
+            <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
+            <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-center">${editBtn}${delBtn}</td>
+        `;
+    });
+}
+
+function renderProgressionChart(records) {
+    const ctx = document.getElementById('bmiProgressionChart');
+    const chartCard = document.getElementById('stats-chart-card');
+    if (!ctx || !chartCard) return;
+
+    const cipList = records.map(r => r.cip);
+    const isIndividual = records.length > 0 && cipList.every((val, i, arr) => val === arr[0]);
+    
+    if (!isIndividual) {
+        chartCard.style.display = 'none';
+        return;
+    }
+    
+    chartCard.style.display = 'block';
+
+    const chartRecordsAsc = [...records].map(r => {
+        const parts = r.fecha.split('/'); 
+        const sortKey = parseInt(parts[2]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[0]); 
+        return { ...r, sortKey };
+    }).sort((a, b) => a.sortKey - b.sortKey);
+
+    const labels = chartRecordsAsc.map(r => r.fecha + (r.motivo==='NO ASISTIÓ' ? ' (X)' : ''));
+    const dataPoints = chartRecordsAsc.map(r => r.motivo === 'NO ASISTIÓ' ? null : parseFloat(r.imc));
+
+    if (progressionChart) progressionChart.destroy();
+
+    progressionChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'IMC',
+                data: dataPoints,
+                borderColor: '#CCFF00',
+                backgroundColor: 'rgba(204, 255, 0, 0.1)',
+                borderWidth: 2,
+                tension: 0.4,
+                spanGaps: true,
+                pointRadius: 5,
+                pointBackgroundColor: dataPoints.map(imc => {
+                    if (imc === null) return '#808080';
+                    if (imc >= 30) return '#E74C3C';
+                    if (imc >= 25) return '#FFD700';
+                    return '#008744';
+                })
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#EEEEEE' } },
+                title: { display: true, text: `${records[0].grado} ${records[0].apellido} - PROGRESIÓN`, color: '#FFD700', font: { size: 16 } }
+            },
+            scales: {
+                y: { min: 15, max: 40, ticks: { color: '#A0A0A0' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
+                x: { ticks: { color: '#A0A0A0' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }
+            }
+        }
+    });
+}
+
+// --- 5. CÁLCULOS Y LÓGICA DE NEGOCIO ---
+
+function calculateIMC(w, h) { return h > 0 ? (w / (h * h)).toFixed(1) : 0; }
+
+function getRiskByWaist(sex, pab) {
+    const p = parseFloat(pab);
+    if (p === 0 || isNaN(p)) return 'N/A';
+    if (sex === 'Masculino') return p < 94 ? 'RIESGO BAJO' : p < 102 ? 'RIESGO ALTO' : 'RIESGO MUY ALTO';
+    return p < 80 ? 'RIESGO BAJO' : p < 88 ? 'RIESGO ALTO' : 'RIESGO MUY ALTO';
+}
+
+function getClassificacionPA(pa) {
+    if (!pa || !pa.includes('/')) return 'N/A';
+    const [s, d] = pa.split('/').map(Number);
+    if (isNaN(s)) return 'N/A';
+    if (s >= 140 || d >= 90) return 'HIPERTENSION (ESTADIO 2)';
+    if (s >= 130 || d >= 80) return 'HIPERTENSION (ESTADIO 1)';
+    if (s >= 120 && d < 80) return 'ELEVADA';
+    return 'NORMAL';
+}
+
+function getAptitude(imc, sex, pab, pa) {
+    const i = parseFloat(imc), p = parseFloat(pab);
+    if (i === 0 || isNaN(i)) return { resultado: 'INAPTO', clasificacionMINSA: 'NO ASISTIÓ', paClasificacion: 'N/A', riesgoAEnf: 'N/A', motivoInapto: 'NO ASISTIÓ' };
+    
+    let minsa = "NORMAL";
+    if (i < 18.5) minsa = "DELGADEZ";
+    else if (i < 25) minsa = "NORMAL";
+    else if (i < 30) minsa = "SOBREPESO";
+    else if (i < 35) minsa = "OBESIDAD I";
+    else if (i < 40) minsa = "OBESIDAD II";
+    else minsa = "OBESIDAD III";
+    
+    const paClass = getClassificacionPA(pa);
+    const riesgo = getRiskByWaist(sex, pab);
+    
+    let inapto = false, motivo = "";
+    if (i >= 30.0) { inapto = true; motivo = "IMC Obesidad"; } 
+    else if ((sex === 'Masculino' && p >= 94) || (sex === 'Femenino' && p >= 80)) { inapto = true; motivo = "Riesgo Abdominal"; }
+
+    let res = "APTO";
+    if (inapto) {
+        if ((sex === 'Masculino' && p < 94) || (sex === 'Femenino' && p < 80)) {
+            res = "APTO (EXCEPCIÓN)";
+        } else {
+            res = `INAPTO (${motivo})`;
+        }
+    }
+    return { resultado: res, clasificacionMINSA: minsa, paClasificacion: paClass, riesgoAEnf: riesgo, motivoInapto: motivo };
+}
+
+function applyMilitaryIMCException(imc, sex, pab) {
+    if (parseFloat(imc) > 29.9) {
+        if ((sex === 'Masculino' && parseFloat(pab) < 94) || (sex === 'Femenino' && parseFloat(pab) < 84)) return { imc: 29.9, sobrescrito: true, motivo: "APTO (EXCEPCIÓN PAB)" };
+    }
+    return { imc: parseFloat(imc), sobrescrito: false, motivo: "" };
+}
+
+// --- 6. CONEXIÓN API (CRUD) ---
+
+async function fetchAndDisplayRecords() {
+    try {
+        const response = await fetch('/api/records');
+        if (!response.ok) throw new Error('Error al cargar registros.');
+        allRecordsFromDB = await response.json();
+        populateMonthFilter();
+        populateUnitFilter();
+        filterTable();
+    } catch (error) {
+        console.error("Error:", error);
+        const tb = document.getElementById('admin-table-body');
+        if(tb) tb.innerHTML = `<tr><td colspan="12" class="text-center">Error de conexión.</td></tr>`;
+    }
+}
+
+async function saveRecord(record) {
+    try {
+        const response = await fetch('/api/records', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record) });
+        if (!response.ok) throw new Error('Error al guardar.');
+        displayMessage('ÉXITO', 'Registro guardado.', 'success');
+        document.getElementById('admin-record-form').reset();
+        const now = new Date();
+        document.getElementById('input-registro-month').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+        await fetchAndDisplayRecords();
+    } catch (error) { displayMessage('ERROR', error.message, 'error'); }
+}
+
+async function updateRecord(id, record) {
+    try {
+        const response = await fetch(`/api/records/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record) });
+        if (!response.ok) throw new Error('Error al actualizar.');
+        displayMessage('ÉXITO', 'Registro actualizado.', 'success');
+        cancelEdit();
+        await fetchAndDisplayRecords();
+    } catch (error) { displayMessage('ERROR', error.message, 'error'); }
+}
+
+async function deleteRecord(id) {
+    if (!confirm('¿Eliminar registro?')) return;
+    try {
+        await fetch(`/api/records/${id}`, { method: 'DELETE' });
+        displayMessage('ELIMINADO', 'Registro borrado.', 'warning');
+        await fetchAndDisplayRecords();
+    } catch (error) { displayMessage('ERROR', error.message, 'error'); }
+}
+
+// --- 7. FORMULARIOS Y EDICIÓN ---
+
+function handleEditRecord(id) {
+    const r = allRecordsFromDB.find(x => x.id === id);
+    if (!r) return;
+    const f = document.getElementById('admin-record-form');
+    f['input-gguu'].value = r.gguu; f['input-unidad'].value = r.unidad; f['input-dni'].value = r.dni; f['input-userid'].value = r.cip;
+    f['input-role'].value = r.grado; f['input-sex-admin'].value = r.sexo; f['input-lastname'].value = r.apellido; f['input-firstname'].value = r.nombre;
+    f['input-age-admin'].value = r.edad; f['input-weight-admin'].value = r.peso; f['input-height-admin'].value = r.altura; f['input-pab'].value = r.pab; f['input-pa'].value = r.pa;
+    
+    if(r.fecha && r.fecha.length===10) {
+        const [d, m, y] = r.fecha.split('/');
+        f['input-registro-month'].value = `${y}-${m}`;
+    }
+    isEditMode = true; currentEditingRecordId = id;
+    document.getElementById('cancel-edit-button').classList.remove('hidden');
+    document.querySelector('#admin-record-form button[type="submit"]').innerHTML = '<i class="fas fa-save"></i> ACTUALIZAR';
+    f.scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelEdit() {
+    isEditMode = false; currentEditingRecordId = null;
+    document.getElementById('admin-record-form').reset();
+    document.getElementById('cancel-edit-button').classList.add('hidden');
+    document.querySelector('#admin-record-form button[type="submit"]').innerHTML = '<i class="fas fa-database"></i> GUARDAR';
+    const now = new Date();
+    document.getElementById('input-registro-month').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+}
+
+// --- 8. LOGIN Y USUARIOS ---
+
+async function attemptAdminLogin() {
+    const u = document.getElementById('admin-username').value;
+    const p = document.getElementById('admin-password').value;
+    try {
+        const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({cip:u, password:p}) });
+        const d = await res.json();
+        if(!res.ok) throw new Error(d.message);
+        isAuthenticated = true; currentAdminUser = d.user.cip; currentAdminFullName = d.user.fullName; currentUserRole = d.user.role;
+        updateUI();
+        displayMessage('BIENVENIDO', `Hola, ${currentAdminFullName}`, 'success');
+    } catch(e) { displayMessage('ACCESO DENEGADO', e.message, 'error'); }
+}
+
+function logoutAdmin() {
+    isAuthenticated = false; currentAdminUser = null;
+    updateUI();
+    displayMessage('SESIÓN CERRADA', 'Hasta luego.', 'warning');
+}
+
+async function fetchAndDisplayUsers() {
+    const res = await fetch('/api/users');
+    const users = await res.json();
+    const tb = document.getElementById('users-table-body');
+    if(tb) {
+        tb.innerHTML = '';
+        users.forEach(u => {
+            tb.insertRow().innerHTML = `<td class="px-4 py-3">${u.cip}</td><td class="px-4 py-3">${u.fullName}</td><td class="px-4 py-3 text-center"><button onclick="handleEditUser('${u.cip}')" class="text-blue-500"><i class="fas fa-pencil-alt"></i></button></td>`;
+        });
+    }
+}
+
+function handleEditUser(cip) {
+    const p = prompt(`Nueva contraseña para ${cip}:`);
+    if(p) fetch(`/api/users/password/${cip}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({newPassword:p})}).then(()=>{alert('Clave cambiada');});
+}
+
+// --- 9. EXPORTACIONES ---
+
+function exportToExcel() {
+    if (!isAuthenticated) { displayMessage('Error', 'Inicie sesión.', 'error'); return; }
+    const btn = document.getElementById('export-excel-button');
+    const original = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GENERANDO...'; btn.disabled = true;
+    
+    fetch('/api/export-excel', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ records: currentFilteredRecords, reportMonth: document.getElementById('input-report-month').value })
+    })
+    .then(res => res.blob())
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; 
+        const d = new Date();
+        a.download = `Reporte_SIMCEP_${d.getFullYear()}${d.getMonth()+1}${d.getDate()}.xlsx`;
+        document.body.appendChild(a); a.click(); a.remove();
+        displayMessage('ÉXITO', 'Excel descargado.', 'success');
+    })
+    .catch(e => displayMessage('ERROR', e.message, 'error'))
+    .finally(() => { btn.innerHTML = original; btn.disabled = false; });
+}
+
+function exportToWord() {
+    if (!isAuthenticated) { displayMessage('Error', 'Inicie sesión.', 'error'); return; }
+    if (currentFilteredRecords.length === 0) { displayMessage('Vacío', 'No hay datos.', 'warning'); return; }
+    
+    const reportDate = new Date().toLocaleDateString('es-ES');
+    let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte</title></head><body>`;
+    html += `<h1 style="text-align:center; color:#1e3a8a;">REPORTE SIMCEP</h1><p style="text-align:center;">Fecha: ${reportDate}</p>`;
+    html += `<table border="1" style="width:100%; border-collapse:collapse;"><thead><tr style="background:#2F4F4F; color:white;"><th>CIP</th><th>GRADO</th><th>NOMBRE</th><th>IMC</th><th>CLASIF</th></tr></thead><tbody>`;
+    
+    currentFilteredRecords.forEach(r => {
+        const apt = getAptitude(r.imc, r.sexo, r.pab, r.pa);
+        const color = apt.resultado.startsWith('INAPTO') ? 'color:red; font-weight:bold;' : 'color:green;';
+        html += `<tr><td>${r.cip}</td><td>${r.grado}</td><td>${r.apellido}</td><td>${r.imc}</td><td style="${color}">${apt.resultado}</td></tr>`;
+    });
+    html += `</tbody></table></body></html>`;
+    
+    const blob = new Blob([html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = `Reporte_SIMCEP.doc`;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+}
+
+function exportStatsToWord() {
+    displayMessage('INFO', 'Función en desarrollo. Use la descarga de imagen.', 'warning');
+}
+
+function downloadChartAsImage() {
+    const canvas = document.getElementById('bmiProgressionChart');
+    if(!canvas || !progressionChart) { displayMessage('Error', 'No hay gráfica.', 'error'); return; }
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'Grafica_IMC.png';
+    a.click();
+}
+
+// --- 10. EVENT LISTENERS ---
 
 document.getElementById('admin-record-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -709,7 +602,13 @@ document.getElementById('bmi-form')?.addEventListener('submit', (e) => {
         const apt = getAptitude(imc, s, p, 'N/A');
         document.getElementById('bmi-value').textContent = imc;
         document.getElementById('aptitude-badge').textContent = apt.resultado;
-        document.getElementById('result-box').classList.remove('hidden');
+        document.getElementById('aptitude-detail').textContent = apt.clasificacionMINSA;
+        
+        const box = document.getElementById('result-box');
+        box.classList.remove('hidden');
+        const badge = document.getElementById('aptitude-badge');
+        const color = apt.resultado.startsWith('INAPTO') ? 'bg-red-700' : 'bg-green-700';
+        badge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${color} text-white`;
     }
 });
 
