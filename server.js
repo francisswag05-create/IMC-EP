@@ -1,4 +1,4 @@
-// server.js (Versión Definitiva y Limpia, sin Errores de Sintaxis)
+// server.js (Versión Definitiva - CORREGIDO ERROR 413 EXPORTACIÓN MASIVA)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -13,9 +13,13 @@ const ExcelJS = require('exceljs');
 const app = express();
 const PORT = process.env.PORT || 3000; 
 
-// --- 2. MIDDLEWARE ---
+// --- 2. MIDDLEWARE (MODIFICADO PARA SOPORTAR GRANDES CARGAS DE DATOS) ---
 app.use(cors()); 
-app.use(express.json()); 
+
+// AUMENTAMOS EL LÍMITE A 50MB PARA EVITAR EL ERROR 413 AL EXPORTAR A EXCEL
+app.use(express.json({ limit: '50mb' })); 
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
 // Servir la carpeta raíz como estática
 app.use(express.static(path.join(__dirname, '/'))); 
 
