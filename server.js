@@ -1,4 +1,4 @@
-// server.js (Versión Definitiva - CORREGIDO ERROR 413 EXPORTACIÓN MASIVA)
+// server.js (Versión Definitiva - CORREGIDO ERROR 413 EXPORTACIÓN MASIVA + ORDENAMIENTO MILITAR)
 
 // --- 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL ---
 const express = require('express');
@@ -41,6 +41,95 @@ function dbQueryPromise(sql, params = []) {
             console.error("Error en consulta DB:", err.message);
             throw err;
         });
+}
+
+// ******************************************************************
+// *** LÓGICA DE ORDENAMIENTO MILITAR (CG III DE -> UNIDADES -> GRADOS) ***
+// ******************************************************************
+function sortRecordsByMilitaryHierarchy(records) {
+    // 1. PRIORIDAD DE GRADOS (Menor número = Mayor Antigüedad)
+    const rankPriority = {
+        // Oficiales Generales
+        "GRAL DIV": 1, "GRAL DE DIV": 1,
+        "GRAL BRIG": 2, "GRAL DE BRIG": 2,
+        // Oficiales Superiores
+        "CRL": 3, "CORONEL": 3,
+        "TTE CRL": 4, "TTE CORONEL": 4, 
+        "MY": 5, "MAYOR": 5,
+        // Oficiales Subalternos
+        "CAP": 6, "CAPITAN": 6, "CAPITÁN": 6, 
+        "TTE": 7, "TENIENTE": 7, 
+        "ALFZ": 8, "ALFEREZ": 8,
+        "STTE": 8, "SUB TTE": 8, "SUB TENIENTE": 8, 
+        // Técnicos
+        "TCO JS": 9, "TC JF SUP": 9, 
+        "TCO J": 10, "TC JEFE": 10, 
+        "TCO 1º": 11, "TCO 1": 11, "TCO 1°": 11,
+        "TCO 2º": 12, "TCO 2": 12, "TCO 2°": 12,
+        "TCO 3º": 13, "TCO 3": 13, "TCO 3°": 13,
+        // Suboficiales
+        "SO 1º": 14, "SO 1": 14, "SO 1°": 14,
+        "SO 2º": 15, "SO 2": 15, "SO 2°": 15, 
+        "SO 3º": 16, "SO 3": 16, "SO 3°": 16,
+        // Tropa y Empleados
+        "S/M": 17, "SGTO": 18, "CBO": 19, "SLDO": 20, "EC": 21
+    };
+
+    // 2. PRIORIDAD DE UNIDADES (CG III DE PRIMERO)
+    const unitPriorityKeywords = [
+        { key: "CG III DE", weight: 1 },
+        { key: "CIA CMDO", weight: 2 },  // Agrupa "CIA CMDO N° 113"
+        { key: "BAND MUS", weight: 3 },  // Agrupa "BAND MUS N° 103"
+        { key: "CIA PM", weight: 4 }     // Agrupa "CIA PM N° 113"
+    ];
+
+    return records.sort((a, b) => {
+        const unitA = (a.unidad || "").toUpperCase().trim();
+        const unitB = (b.unidad || "").toUpperCase().trim();
+        const rankA = (a.grado || "").toUpperCase().trim();
+        const rankB = (b.grado || "").toUpperCase().trim();
+        const nameA = (a.apellido || "").toUpperCase();
+        const nameB = (b.apellido || "").toUpperCase();
+
+        // --- CRITERIO 1: UNIDAD ---
+        let weightUnitA = 999; 
+        let weightUnitB = 999;
+
+        for (const item of unitPriorityKeywords) {
+            if (unitA.includes(item.key)) { weightUnitA = item.weight; break; }
+        }
+        for (const item of unitPriorityKeywords) {
+            if (unitB.includes(item.key)) { weightUnitB = item.weight; break; }
+        }
+
+        if (weightUnitA !== weightUnitB) {
+            return weightUnitA - weightUnitB;
+        }
+        
+        // Si ambas son unidades "otras" (peso 999), ordenar alfabéticamente por nombre de Unidad
+        if (weightUnitA === 999 && weightUnitB === 999) {
+            if (unitA < unitB) return -1;
+            if (unitA > unitB) return 1;
+        }
+
+        // --- CRITERIO 2: GRADO (JERARQUÍA) ---
+        // Limpiar puntos para asegurar coincidencia (Ej: TCO. 1 -> TCO 1)
+        const cleanRankA = rankA.replace(/\./g, '');
+        const cleanRankB = rankB.replace(/\./g, '');
+        
+        const weightRankA = rankPriority[cleanRankA] || rankPriority[rankA] || 999;
+        const weightRankB = rankPriority[cleanRankB] || rankPriority[rankB] || 999;
+
+        if (weightRankA !== weightRankB) {
+            return weightRankA - weightRankB;
+        }
+
+        // --- CRITERIO 3: APELLIDO (ANTIGÜEDAD RELATIVA) ---
+        if (nameA < nameB) return -1;
+        if (nameA > nameB) return 1;
+        
+        return 0;
+    });
 }
 
 // Función para inicializar la base de datos (Postgres)
@@ -200,11 +289,10 @@ function generateMissingRecords(records, endMonthYear) {
 
 // --- 4. RUTAS DE LA API PARA REGISTROS ---
 
-// [GET] /api/stats (Postgres): Consulta con filtros para la tabla de registros
+// [GET] /api/stats (Postgres): Consulta con filtros y ordenamiento militar
 app.get('/api/stats', (req, res) => {
     const { cip, gguu, unidad, sexo, monthYear, apellidoNombre, edad, aptitud } = req.query; 
 
-    // Ajuste: Ordenar por ID descendente para mostrar los más recientes primero
     let sql = "SELECT * FROM records WHERE 1=1"; 
     let params = [];
 
@@ -242,12 +330,14 @@ app.get('/api/stats', (req, res) => {
         params.push(pattern);
     }
 
-    sql += " ORDER BY id DESC"; // Muestra los más recientes primero
+    // Nota: Ya no ordenamos por ID DESC en SQL porque lo haremos en JS con la función militar
+    // sql += " ORDER BY id DESC"; 
 
     pool.query(sql, params)
         .then(result => {
-            // No devolver 404 si la lista está vacía, solo devolver un array vacío.
-            res.json(result.rows);
+            // APLICAR ORDENAMIENTO MILITAR ANTES DE RESPONDER
+            const sorted = sortRecordsByMilitaryHierarchy(result.rows);
+            res.json(sorted);
         })
         .catch(err => {
             console.error("Error en GET /api/stats:", err.message);
@@ -372,7 +462,11 @@ app.get('/api/patient/:dni', (req, res) => {
 app.get('/api/records', (req, res) => {
     const sql = "SELECT * FROM records ORDER BY id DESC";
     pool.query(sql)
-        .then(result => res.json(result.rows))
+        .then(result => {
+            // También ordenamos aquí por si acaso se llama directamente
+            const sorted = sortRecordsByMilitaryHierarchy(result.rows);
+            res.json(sorted);
+        })
         .catch(err => res.status(500).json({ error: err.message }));
 });
 
@@ -528,8 +622,10 @@ app.post('/api/export-excel', async (req, res) => {
             // 3. RELLENAR LOS MESES FALTANTES
             // La función generateMissingRecords devuelve el historial completo, rellenando vacíos
             finalRecordsToExport = generateMissingRecords(allPatientRecords, endMonthYear);
+        } else {
+            // RE-ORDENAMIENTO ASEGURADO PARA EXCEL (Consolidado Masivo)
+            finalRecordsToExport = sortRecordsByMilitaryHierarchy(finalRecordsToExport);
         }
-        // ****************************************************
 
         // ****************************************************
         // *** CONFIGURACIÓN DE COLORES Y FILTROS EN EXCEL ***
