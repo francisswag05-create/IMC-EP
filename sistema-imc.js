@@ -1,4 +1,4 @@
-// sistema-imc.js (Versión Final Corregida: Login Arreglado)
+// sistema-imc.js (Versión Final Definitiva: Login, Filtros, Word y Diseño Integrados)
 
 // --- 1. VARIABLES GLOBALES ---
 let isAuthenticated = false;
@@ -148,7 +148,6 @@ async function updateUI() {
     if (!publicView || !adminView) return;
 
     if (isAuthenticated) {
-        // Aquí estaba el error, ahora las variables coinciden
         publicView.classList.add('hidden-view');
         adminView.classList.remove('hidden-view');
         userInfo.textContent = `Usuario: ${currentAdminUser}`;
@@ -456,7 +455,7 @@ function handleEditRecord(id) {
     }
     isEditMode = true; currentEditingRecordId = id;
     document.getElementById('cancel-edit-button').classList.remove('hidden');
-    document.querySelector('#admin-record-form button[type="submit"]').innerHTML = '<i class="fas fa-save"></i> ACTUALIZAR';
+    document.querySelector('#admin-record-form button[type="submit"]').innerHTML = '<i class="fas fa-save"></i> ACTUALIZAR REGISTRO';
     f.scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -520,23 +519,31 @@ function exportToExcel() {
         displayMessage('ÉXITO', 'Excel descargado.', 'success');
     }).catch(e => displayMessage('ERROR', e.message, 'error')).finally(() => { btn.innerHTML = original; btn.disabled = false; });
 }
+
+// --- FUNCIÓN CORREGIDA QUE FALTABA ---
 function exportToWord() {
     if (!isAuthenticated) { displayMessage('Error', 'Inicie sesión.', 'error'); return; }
     if (currentFilteredRecords.length === 0) { displayMessage('Vacío', 'No hay datos.', 'warning'); return; }
+    
     const reportDate = new Date().toLocaleDateString('es-ES');
-    let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte</title></head><body><h1 style="text-align:center;">REPORTE SIMCEP</h1><p style="text-align:center;">${reportDate}</p><table border="1" style="width:100%;border-collapse:collapse;"><thead><tr style="background:#333;color:#fff;"><th>CIP</th><th>GRADO</th><th>NOMBRE</th><th>IMC</th><th>CLASIF</th></tr></thead><tbody>`;
+    let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte</title></head><body>`;
+    html += `<h1 style="text-align:center; color:#1e3a8a;">REPORTE SIMCEP</h1><p style="text-align:center;">Fecha: ${reportDate}</p>`;
+    html += `<table border="1" style="width:100%; border-collapse:collapse;"><thead><tr style="background:#2F4F4F; color:white;"><th>CIP</th><th>GRADO</th><th>NOMBRE</th><th>IMC</th><th>CLASIF</th></tr></thead><tbody>`;
+    
     currentFilteredRecords.forEach(r => {
         const apt = getAptitude(r.imc, r.sexo, r.pab, r.pa);
-        const color = apt.resultado.startsWith('INAPTO') ? 'color:red;font-weight:bold;' : 'color:green;';
+        const color = apt.resultado.startsWith('INAPTO') ? 'color:red; font-weight:bold;' : 'color:green;';
         html += `<tr><td>${r.cip}</td><td>${r.grado}</td><td>${r.apellido}</td><td>${r.imc}</td><td style="${color}">${apt.resultado}</td></tr>`;
     });
     html += `</tbody></table></body></html>`;
+    
     const blob = new Blob([html], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url; link.download = `Reporte_SIMCEP.doc`;
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
 }
+
 function exportStatsToWord() { displayMessage('INFO', 'Use "Descargar Gráfica PNG" para insertar en Word.', 'warning'); }
 function downloadChartAsImage() {
     const canvas = document.getElementById('bmiProgressionChart');
@@ -547,11 +554,10 @@ function downloadChartAsImage() {
 // --- 10. AUTOCOMPLETADO DE DATOS (DNI o CIP) ---
 
 function handleAutofill(value) {
-    if (value && value.length >= 6) { // Buscar si tiene 6+ caracteres
+    if (value && value.length >= 6) { 
         fetch(`/api/patient/${value}`).then(r => r.json()).then(d => {
             if (d.cip) {
                 const f = document.getElementById('admin-record-form');
-                // Llenar campos
                 f['input-gguu'].value = d.gguu || '';
                 f['input-unidad'].value = d.unidad || '';
                 f['input-dni'].value = d.dni || (value.length === 8 ? value : ''); 
@@ -561,13 +567,10 @@ function handleAutofill(value) {
                 f['input-firstname'].value = d.nombre || '';
                 f['input-age-admin'].value = d.edad || '';
                 f['input-sex-admin'].value = d.sexo || 'Masculino';
-                
-                // Limpiar mediciones para nuevo registro
                 f['input-weight-admin'].value = '';
                 f['input-height-admin'].value = '';
                 f['input-pab'].value = '';
                 f['input-pa'].value = '';
-                
                 displayMessage('AUTOCOMPLETADO', `Datos de ${d.grado} ${d.apellido} cargados.`, 'success');
             }
         }).catch(() => { /* Silencio */ });
@@ -638,11 +641,12 @@ document.addEventListener('DOMContentLoaded', () => {
         else saveRecord(rec);
     });
 
+    // Conectar la calculadora pública con los IDs correctos del nuevo HTML
     document.getElementById('bmi-form')?.addEventListener('submit', (e) => {
         e.preventDefault();
         const w = parseFloat(document.getElementById('input-weight').value);
         const h = parseFloat(document.getElementById('input-height').value);
-        const p = parseFloat(document.getElementById('input-pab-public').value); // ID Correcto
+        const p = parseFloat(document.getElementById('input-pab-public').value); // ID CORRECTO
         const s = document.getElementById('input-sex').value;
         if(w>0 && h>0) {
             const imc = calculateIMC(w, h);
