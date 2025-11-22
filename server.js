@@ -616,13 +616,18 @@ app.post('/api/export-excel', async (req, res) => {
         infoBoxCell.font = { name: 'Calibri', size: 11, bold: true };
         infoBoxCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
         
-        ws.autoFilter = { from: 'A6', to: `${lastColumnLetter}6` };
+        // --- CÓDIGO CORREGIDO ---
+        worksheet.autoFilter = { from: 'A6', to: `${lastColumnLetter}6` }; // CORRECCIÓN: ws -> worksheet
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename=' + 'Reporte_SIMCEP_Mensual.xlsx');
-        await wb.xlsx.write(res);
+        await workbook.xlsx.write(res); // CORRECCIÓN: wb -> workbook
         res.end();
+        // --- FIN CÓDIGO CORREGIDO ---
+
     } catch (error) {
         console.error("Error Excel:", error);
+        // Si hay un error, aún enviamos la respuesta de error 500 como JSON
+        // Nota: Asegúrate de que no se haya enviado ningún encabezado antes
         res.status(500).json({ message: "Error interno al generar el reporte Excel.", error: error.message });
     }
 });
