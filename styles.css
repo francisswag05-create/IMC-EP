@@ -267,3 +267,9 @@ header {
 .text-color-primary-green {
     color: var(--color-primary-green) !important;
 }
+
+/* NUEVA CLASE PARA RESALTAR TEXTO EN ROJO DE RIESGO EN LA TABLA */
+.text-color-alert-red {
+    color: var(--color-alert-red) !important;
+    font-weight: bold; 
+}

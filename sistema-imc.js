@@ -234,10 +234,28 @@ function renderTable(records) {
     }
     
     records.forEach(data => {
+        // --- Cálculo de Aptitud y Clasificación ---
         const { resultado, paClasificacion, riesgoAEnf, clasificacionMINSA } = getAptitude(data.imc, data.sexo, data.pab, data.pa);
         
+        // --- LÓGICA DE CLASES DE RIESGO ---
         const badgeClass = resultado.startsWith('INAPTO') ? 'bg-red-700 text-white' : 'bg-green-700 text-white';
         const rowBgClass = resultado.startsWith('INAPTO') ? 'bg-red-900/10' : '';
+        
+        // Clase para la celda PA / CLASIF: Rojo si hay Hipertensión (Estadio 1 o 2)
+        const paClass = paClasificacion.includes('HIPERTENSION') ? 'text-color-alert-red' : 'text-color-text-light';
+        
+        // Clase para la celda PAB / RIESGO: Rojo si es Riesgo Alto o Muy Alto
+        const pabClass = (riesgoAEnf.includes('ALTO') || riesgoAEnf.includes('MUY ALTO')) ? 'text-color-alert-red' : 'text-color-text-light';
+        
+        // Clase para la celda IMC: Rojo si es Obesidad I, II o III, Dorado si es Sobrepeso o Normal
+        let imcClass = 'text-color-text-light'; // Base
+        if (clasificacionMINSA.includes('OBESIDAD')) {
+            imcClass = 'text-color-alert-red'; // Obesidad I, II, III
+        } else if (clasificacionMINSA.includes('SOBREPESO') || clasificacionMINSA.includes('NORMAL')) {
+            imcClass = 'text-color-accent-gold'; // Dorado para sobrepeso/Normal (destacar)
+        }
+        // --- FIN LÓGICA DE CLASES DE RIESGO ---
+        
         const row = tableBody.insertRow();
         row.className = `hover:bg-gray-800 transition duration-150 ease-in-out ${rowBgClass}`;
         
@@ -253,16 +271,18 @@ function renderTable(records) {
         const displayPeso = data.peso > 0 ? data.peso : '-';
         const displayAltura = data.altura > 0.1 ? data.altura : '-';
         const displayIMC = data.imc > 0 ? data.imc : 'N/A';
+        
+        // NOTA: EL TEXTO EN LA COLUMNA CIP Y EDAD YA TIENE CLASES DINÁMICAS DIFERENTES, MANTENEMOS ESOS.
 
         row.innerHTML = `
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-lime">${data.cip || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">${data.grado || 'N/A'}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${(data.apellido || 'N/A').toUpperCase()}, ${data.nombre || ''}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">${data.pa || 'N/A'} <span class="text-xs opacity-75">(${paClasificacion})</span></td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">${data.pab || 'N/A'} <span class="text-xs opacity-75">(${riesgoAEnf})</span></td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm ${paClass}">${data.pa || 'N/A'} <span class="text-xs opacity-75">(${paClasificacion})</span></td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm ${pabClass}">${data.pab || 'N/A'} <span class="text-xs opacity-75">(${riesgoAEnf})</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${displayPeso} / ${displayAltura}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-color-accent-gold">${data.edad || 'N/A'}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${resultado.startsWith('INAPTO') ? 'text-red-500' : 'text-color-accent-gold'}">${displayIMC}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-lg font-extrabold ${imcClass}">${displayIMC}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold">${clasifDisplay}</td>
             <td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">${resultado}</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-xs text-color-text-muted">${data.fecha || 'N/A'}</td>
@@ -375,8 +395,9 @@ function getAptitude(imc, sex, pab, pa) {
 
     let res = "APTO";
     if (inapto) {
-        if ((sex === 'Masculino' && p < 94) || (sex === 'Femenino' && p < 80)) {
-            res = "APTO (EXCEPCIÓN)";
+        // La excepción militar se aplica solo si el CIP tiene sobrepeso o es Obesidad I o II PERO tiene PAB normal
+        if (i < 30.0 && ((sex === 'Masculino' && p < 94) || (sex === 'Femenino' && p < 80))) {
+            res = "APTO (EXCEPCIÓN)"; // No debería llegar aquí si usamos el valor de IMC modificado por applyMilitaryIMCException
         } else {
             res = `INAPTO (${motivo})`;
         }
@@ -385,9 +406,16 @@ function getAptitude(imc, sex, pab, pa) {
 }
 
 function applyMilitaryIMCException(imc, sex, pab) {
+    // Si el IMC es de Obesidad (30.0 o más)
     if (parseFloat(imc) > 29.9) {
-        if ((sex === 'Masculino' && parseFloat(pab) < 94) || (sex === 'Femenino' && parseFloat(pab) < 84)) return { imc: 29.9, sobrescrito: true, motivo: "APTO (EXCEPCIÓN PAB)" };
+        // Y el Perímetro Abdominal está DENTRO del límite de riesgo BAJO para la excepción (Masculino < 94, Femenino < 84)
+        if ((sex === 'Masculino' && parseFloat(pab) < 94) || (sex === 'Femenino' && parseFloat(pab) < 84)) {
+             // El IMC se sobrescribe a 29.9 (lo suficiente para pasar como "SOBREPESO" en la clasificación MINSA)
+             // Esto es una excepción, el IMC real sigue siendo alto, pero se permite el registro.
+             return { imc: 29.9, sobrescrito: true, motivo: "APTO (EXCEPCIÓN PAB)" };
+        }
     }
+    // Si no aplica la excepción, devuelve el IMC real
     return { imc: parseFloat(imc), sobrescrito: false, motivo: "" };
 }
 
