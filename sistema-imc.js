@@ -1,4 +1,4 @@
-// sistema-imc.js (Versión Final Definitiva: Autocompletado CIP/DNI + Filtros + Gráficos + Word)
+// sistema-imc.js (Versión Final Corregida: Login Arreglado)
 
 // --- 1. VARIABLES GLOBALES ---
 let isAuthenticated = false;
@@ -137,22 +137,23 @@ function filterTable() {
     renderProgressionChart(currentFilteredRecords);
 }
 
-// --- 4. UI UPDATES ---
+// --- 4. UI UPDATES (CORREGIDO EL ERROR DE VARIABLES) ---
 async function updateUI() {
-    const pView = document.getElementById('public-access-view');
-    const aView = document.getElementById('admin-dashboard-view');
-    const uInfo = document.getElementById('current-user-info');
-    const monText = document.getElementById('monitoring-status-text');
-    const uMgmt = document.getElementById('user-management-section');
+    const publicView = document.getElementById('public-access-view');
+    const adminView = document.getElementById('admin-dashboard-view');
+    const userInfo = document.getElementById('current-user-info');
+    const monitoringTextEl = document.getElementById('monitoring-status-text');
+    const userManagementSection = document.getElementById('user-management-section');
 
     if (!publicView || !adminView) return;
 
     if (isAuthenticated) {
-        pView.classList.add('hidden-view');
+        // Aquí estaba el error, ahora las variables coinciden
+        publicView.classList.add('hidden-view');
         adminView.classList.remove('hidden-view');
-        uInfo.textContent = `Usuario: ${currentAdminUser}`;
-        uInfo.classList.remove('text-color-accent-lime', 'border-gray-600');
-        uInfo.classList.add('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
+        userInfo.textContent = `Usuario: ${currentAdminUser}`;
+        userInfo.classList.remove('text-color-accent-lime', 'border-gray-600');
+        userInfo.classList.add('bg-color-accent-gold', 'border-color-accent-gold', 'text-color-green-darker');
 
         if (monitoringTextEl && currentAdminFullName) {
             monitoringTextEl.innerHTML = `<i class="fas fa-check-double mr-3 text-color-accent-gold"></i> Monitoreo Activo: <span class="text-color-accent-lime">${currentAdminFullName}</span>`;
@@ -276,6 +277,7 @@ function renderProgressionChart(records) {
     const chartCard = document.getElementById('stats-chart-card');
     if (!ctx || !chartCard) return;
 
+    // Solo mostrar si es un solo usuario filtrado
     const cipList = records.map(r => r.cip);
     const isIndividual = records.length > 0 && cipList.every((val, i, arr) => val === arr[0]);
     
@@ -325,7 +327,7 @@ function renderProgressionChart(records) {
                 title: { display: true, text: `${records[0].grado} ${records[0].apellido} - PROGRESIÓN`, color: '#FFD700', font: { size: 16 } }
             },
             scales: {
-                y: { min: 15, max: 40, ticks: { color: '#A0A0A0' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
+                y: { min: 15, max: 40, ticks: { color: '#A0A0A0' }, grid: { color: 'rgba(255, 255, 255, 0.1)' }, title: { display: true, text: 'IMC', color: '#A0A0A0' } },
                 x: { ticks: { color: '#A0A0A0' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }
             }
         }
@@ -512,72 +514,47 @@ function exportToExcel() {
     const btn = document.getElementById('export-excel-button');
     const original = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> GENERANDO...'; btn.disabled = true;
-    
-    fetch('/api/export-excel', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ records: currentFilteredRecords, reportMonth: document.getElementById('input-report-month').value })
-    })
-    .then(res => res.blob())
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; 
-        const d = new Date();
-        a.download = `Reporte_SIMCEP_${d.getFullYear()}${d.getMonth()+1}${d.getDate()}.xlsx`;
-        document.body.appendChild(a); a.click(); a.remove();
+    fetch('/api/export-excel', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ records: currentFilteredRecords, reportMonth: document.getElementById('input-report-month').value }) })
+    .then(res => res.blob()).then(blob => {
+        const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `Reporte_SIMCEP.xlsx`; document.body.appendChild(a); a.click(); a.remove();
         displayMessage('ÉXITO', 'Excel descargado.', 'success');
-    })
-    .catch(e => displayMessage('ERROR', e.message, 'error'))
-    .finally(() => { btn.innerHTML = original; btn.disabled = false; });
+    }).catch(e => displayMessage('ERROR', e.message, 'error')).finally(() => { btn.innerHTML = original; btn.disabled = false; });
 }
-
 function exportToWord() {
     if (!isAuthenticated) { displayMessage('Error', 'Inicie sesión.', 'error'); return; }
     if (currentFilteredRecords.length === 0) { displayMessage('Vacío', 'No hay datos.', 'warning'); return; }
-    
     const reportDate = new Date().toLocaleDateString('es-ES');
-    let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte</title></head><body>`;
-    html += `<h1 style="text-align:center; color:#1e3a8a;">REPORTE SIMCEP</h1><p style="text-align:center;">Fecha: ${reportDate}</p>`;
-    html += `<table border="1" style="width:100%; border-collapse:collapse;"><thead><tr style="background:#2F4F4F; color:white;"><th>CIP</th><th>GRADO</th><th>NOMBRE</th><th>IMC</th><th>CLASIF</th></tr></thead><tbody>`;
-    
+    let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Reporte</title></head><body><h1 style="text-align:center;">REPORTE SIMCEP</h1><p style="text-align:center;">${reportDate}</p><table border="1" style="width:100%;border-collapse:collapse;"><thead><tr style="background:#333;color:#fff;"><th>CIP</th><th>GRADO</th><th>NOMBRE</th><th>IMC</th><th>CLASIF</th></tr></thead><tbody>`;
     currentFilteredRecords.forEach(r => {
         const apt = getAptitude(r.imc, r.sexo, r.pab, r.pa);
-        const color = apt.resultado.startsWith('INAPTO') ? 'color:red; font-weight:bold;' : 'color:green;';
+        const color = apt.resultado.startsWith('INAPTO') ? 'color:red;font-weight:bold;' : 'color:green;';
         html += `<tr><td>${r.cip}</td><td>${r.grado}</td><td>${r.apellido}</td><td>${r.imc}</td><td style="${color}">${apt.resultado}</td></tr>`;
     });
     html += `</tbody></table></body></html>`;
-    
     const blob = new Blob([html], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url; link.download = `Reporte_SIMCEP.doc`;
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
 }
-
-function exportStatsToWord() {
-    displayMessage('INFO', 'Función en desarrollo. Use la descarga de imagen.', 'warning');
-}
-
+function exportStatsToWord() { displayMessage('INFO', 'Use "Descargar Gráfica PNG" para insertar en Word.', 'warning'); }
 function downloadChartAsImage() {
     const canvas = document.getElementById('bmiProgressionChart');
-    if(!canvas || !progressionChart) { displayMessage('Error', 'No hay gráfica visible.', 'error'); return; }
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    a.download = 'Grafica_IMC.png';
-    a.click();
+    if(!canvas || !progressionChart) { displayMessage('Error', 'No hay gráfica.', 'error'); return; }
+    const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = 'Grafica_IMC.png'; a.click();
 }
 
-// --- 10. AUTOCOMPLETADO (CORREGIDO PARA CIP y DNI) ---
+// --- 10. AUTOCOMPLETADO DE DATOS (DNI o CIP) ---
 
 function handleAutofill(value) {
-    if (value && value.length >= 6) { // Buscar si tiene 6+ caracteres (CIP o DNI)
+    if (value && value.length >= 6) { // Buscar si tiene 6+ caracteres
         fetch(`/api/patient/${value}`).then(r => r.json()).then(d => {
             if (d.cip) {
                 const f = document.getElementById('admin-record-form');
                 // Llenar campos
                 f['input-gguu'].value = d.gguu || '';
                 f['input-unidad'].value = d.unidad || '';
-                f['input-dni'].value = d.dni || (value.length === 8 ? value : '');
+                f['input-dni'].value = d.dni || (value.length === 8 ? value : ''); 
                 f['input-userid'].value = d.cip || (value.length !== 8 ? value : '');
                 f['input-role'].value = d.grado || '';
                 f['input-lastname'].value = d.apellido || '';
@@ -585,7 +562,7 @@ function handleAutofill(value) {
                 f['input-age-admin'].value = d.edad || '';
                 f['input-sex-admin'].value = d.sexo || 'Masculino';
                 
-                // Limpiar mediciones
+                // Limpiar mediciones para nuevo registro
                 f['input-weight-admin'].value = '';
                 f['input-height-admin'].value = '';
                 f['input-pab'].value = '';
@@ -593,66 +570,16 @@ function handleAutofill(value) {
                 
                 displayMessage('AUTOCOMPLETADO', `Datos de ${d.grado} ${d.apellido} cargados.`, 'success');
             }
-        }).catch(() => { /* Silencio si no encuentra */ });
+        }).catch(() => { /* Silencio */ });
     }
 }
 
-// LISTENERS DE AUTOCOMPLETADO (PARA AMBOS CAMPOS)
+// LISTENERS DE AUTOCOMPLETADO
 document.getElementById('input-dni')?.addEventListener('blur', (e) => handleAutofill(e.target.value));
 document.getElementById('input-userid')?.addEventListener('blur', (e) => handleAutofill(e.target.value));
 
 
-// --- 11. EVENT LISTENERS GENERALES ---
-
-document.getElementById('admin-record-form')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const f = e.target;
-    const regMonthVal = f['input-registro-month'].value;
-    const [y, m] = regMonthVal.split('-').map(Number);
-    const now = new Date();
-    if (y > now.getFullYear() || (y === now.getFullYear() && m > (now.getMonth()+1))) {
-        displayMessage('ERROR', 'Mes futuro no permitido.', 'error'); return;
-    }
-
-    const rec = {
-        gguu: f['input-gguu'].value, unidad: f['input-unidad'].value, dni: f['input-dni'].value, cip: f['input-userid'].value,
-        grado: f['input-role'].value, sexo: f['input-sex-admin'].value, pa: f['input-pa'].value,
-        apellido: f['input-lastname'].value, nombre: f['input-firstname'].value, edad: f['input-age-admin'].value,
-        peso: f['input-weight-admin'].value, altura: f['input-height-admin'].value, pab: f['input-pab'].value,
-        fecha: `01/${String(m).padStart(2,'0')}/${y}`, dob: f['input-dob'].value || '1990-01-01'
-    };
-    
-    const imcReal = calculateIMC(rec.peso, rec.altura);
-    const exc = applyMilitaryIMCException(imcReal, rec.sexo, rec.pab);
-    rec.imc = exc.imc.toFixed(1);
-    const apt = getAptitude(rec.imc, rec.sexo, rec.pab, rec.pa);
-    rec.motivo = exc.sobrescrito ? exc.motivo : apt.motivoInapto;
-    rec.paClasificacion = apt.paClasificacion; rec.riesgoAEnf = apt.riesgoAEnf; rec.registradoPor = currentAdminUser;
-
-    if(isEditMode) updateRecord(currentEditingRecordId, rec);
-    else saveRecord(rec);
-});
-
-document.getElementById('bmi-form')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const w = parseFloat(document.getElementById('input-weight').value);
-    const h = parseFloat(document.getElementById('input-height').value);
-    const p = parseFloat(document.getElementById('input-pab-public').value); // ID CORRECTO
-    const s = document.getElementById('input-sex').value;
-    if(w>0 && h>0) {
-        const imc = calculateIMC(w, h);
-        const apt = getAptitude(imc, s, p, 'N/A');
-        document.getElementById('bmi-value').textContent = imc;
-        document.getElementById('aptitude-badge').textContent = apt.resultado;
-        document.getElementById('aptitude-detail').textContent = apt.clasificacionMINSA;
-        document.getElementById('result-box').classList.remove('hidden');
-        const badge = document.getElementById('aptitude-badge');
-        const color = apt.resultado.startsWith('INAPTO') ? 'bg-red-700' : 'bg-green-700';
-        badge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${color} text-white`;
-    }
-});
-
-// --- INICIALIZACIÓN ---
+// --- 11. INICIALIZACIÓN ---
 document.addEventListener('DOMContentLoaded', () => {
     const now = new Date();
     const mStr = String(now.getMonth() + 1).padStart(2, '0');
@@ -682,6 +609,52 @@ document.addEventListener('DOMContentLoaded', () => {
         })});
         displayMessage('Usuario', 'Creado', 'success');
         fetchAndDisplayUsers();
+    });
+
+    document.getElementById('admin-record-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const f = e.target;
+        const regMonthVal = f['input-registro-month'].value;
+        const [y, m] = regMonthVal.split('-').map(Number);
+        const now = new Date();
+        if (y > now.getFullYear() || (y === now.getFullYear() && m > (now.getMonth()+1))) {
+            displayMessage('ERROR', 'Mes futuro no permitido.', 'error'); return;
+        }
+        const rec = {
+            gguu: f['input-gguu'].value, unidad: f['input-unidad'].value, dni: f['input-dni'].value, cip: f['input-userid'].value,
+            grado: f['input-role'].value, sexo: f['input-sex-admin'].value, pa: f['input-pa'].value,
+            apellido: f['input-lastname'].value, nombre: f['input-firstname'].value, edad: f['input-age-admin'].value,
+            peso: f['input-weight-admin'].value, altura: f['input-height-admin'].value, pab: f['input-pab'].value,
+            fecha: `01/${String(m).padStart(2,'0')}/${y}`, dob: f['input-dob'].value || '1990-01-01'
+        };
+        const imcReal = calculateIMC(rec.peso, rec.altura);
+        const exc = applyMilitaryIMCException(imcReal, rec.sexo, rec.pab);
+        rec.imc = exc.imc.toFixed(1);
+        const apt = getAptitude(rec.imc, rec.sexo, rec.pab, rec.pa);
+        rec.motivo = exc.sobrescrito ? exc.motivo : apt.motivoInapto;
+        rec.paClasificacion = apt.paClasificacion; rec.riesgoAEnf = apt.riesgoAEnf; rec.registradoPor = currentAdminUser;
+
+        if(isEditMode) updateRecord(currentEditingRecordId, rec);
+        else saveRecord(rec);
+    });
+
+    document.getElementById('bmi-form')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const w = parseFloat(document.getElementById('input-weight').value);
+        const h = parseFloat(document.getElementById('input-height').value);
+        const p = parseFloat(document.getElementById('input-pab-public').value); // ID Correcto
+        const s = document.getElementById('input-sex').value;
+        if(w>0 && h>0) {
+            const imc = calculateIMC(w, h);
+            const apt = getAptitude(imc, s, p, 'N/A');
+            document.getElementById('bmi-value').textContent = imc;
+            document.getElementById('aptitude-badge').textContent = apt.resultado;
+            document.getElementById('aptitude-detail').textContent = apt.clasificacionMINSA;
+            document.getElementById('result-box').classList.remove('hidden');
+            const badge = document.getElementById('aptitude-badge');
+            const color = apt.resultado.startsWith('INAPTO') ? 'bg-red-700' : 'bg-green-700';
+            badge.className = `px-5 py-2 font-bold rounded-full shadow-lg uppercase ${color} text-white`;
+        }
     });
 
     updateUI();
