@@ -408,6 +408,9 @@ app.get('/api/patient/:dni', (req, res) => {
             res.json({
                 gguu: row.gguu,
                 unidad: row.unidad,
+                // --- CORRECCIÓN APLICADA AQUÍ ---
+                dni: row.dni, 
+                // --------------------------------
                 cip: row.cip,
                 sexo: row.sexo,
                 apellido: row.apellido,
